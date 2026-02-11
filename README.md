@@ -1,40 +1,34 @@
-# Custom QMK Build for ZSA Moonlander (Oryx Sync)
+# Custom QMK Build for ZSA Moonlander (Clever Injection Method)
 
-This repository allows you to sync your Oryx layout with custom QMK code.
+This repository allows you to sync your Oryx layout with custom QMK code **without merge conflicts**.
 
-## ⚠️ Important: Use the `main` branch
+## How it works (The Clever Bit)
 
-When running the workflow, **always ensure "Use workflow from: main" is selected**.
-Do NOT run the workflow from the `oryx` branch, as it may contain outdated configuration.
+Instead of maintaining a modified `keymap.c` and fighting git merge conflicts every time Oryx updates:
+1.  We maintain our custom code in `custom_qmk/custom_code.c`.
+2.  The workflow downloads the *fresh* Oryx source code.
+3.  It **injects** our custom code into the Oryx keymap on-the-fly during the build.
+    *   It renames Oryx's `process_record_user` to `process_record_user_oryx`.
+    *   It adds a wrapper `process_record_user` that calls YOUR code first.
 
 ## How to use
 
-1.  **Run the Workflow**: Go to the [Actions tab](https://github.com/YiftahCooper/oryx-custom-moonlander/actions).
-2.  Select **Fetch and build layout**.
-3.  Click **Run workflow**.
-    *   **Branch**: Select **`main`**.
-    *   **Layout ID**: `3aMQz` (Default)
-    *   **Geometry**: `moonlander/revb` (Default)
-4.  Wait for the build to finish.
-5.  Download the firmware artifact (`.bin` file).
+1.  **Add Custom Logic**:
+    *   Edit `custom_qmk/custom_code.c` in this repository.
+    *   Add your macros, key overrides, or LED logic there.
+2.  **Run the Workflow**:
+    *   Go to **Actions** -> **Fetch and build layout**.
+    *   Run on branch **`main`**.
+3.  **Download Firmware**:
+    *   Get the `.bin` file from the run artifacts.
 
-## Customization
+## File Structure
 
-After the first run, a folder named `3aMQz` will appear in the root of the repository (in the `main` branch).
-You can edit `keymap.c`, `rules.mk`, and `config.h` inside that folder to add custom QMK features.
+*   `custom_qmk/custom_code.c`: **EDIT THIS FILE.** This is where your code lives.
+*   `scripts/patch_keymap.py`: The script that performs the injection.
+*   `keymap.c` (in artifacts): Generated automatically. Do not edit.
 
-**To avoid merge conflicts:**
-*   Add your custom code in blocks separated by blank lines from the Oryx-generated code.
-*   Do not delete the Oryx-generated comments if possible.
-
-## Updates
-
-To update your layout from Oryx:
-1.  Make changes in Oryx.
-2.  Compile in Oryx (to save the version).
-3.  Run the **Fetch and build layout** workflow again here (using `main`).
-    *   This will fetch the new Oryx version to the `oryx` branch.
-    *   It will merge the changes into `main`.
-    *   It will rebuild the firmware.
-
-If merge conflicts occur, you will need to resolve them locally in the `main` branch and push the fix.
+## Why this is better
+*   **No Conflicts**: You never edit the generated Oryx file directly.
+*   **Clean History**: Your repo only tracks your custom code, not the thousands of lines of Oryx generated code.
+*   **Safe**: If Oryx updates their code structure, the patch script might fail (safe fail), but you won't silently lose logic in a bad merge.
