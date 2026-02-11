@@ -2,15 +2,21 @@
 
 This repository allows you to sync your Oryx layout with custom QMK code.
 
+## ⚠️ Important: Use the `main` branch
+
+When running the workflow, **always ensure "Use workflow from: main" is selected**.
+Do NOT run the workflow from the `oryx` branch, as it may contain outdated configuration.
+
 ## How to use
 
 1.  **Run the Workflow**: Go to the [Actions tab](https://github.com/YiftahCooper/oryx-custom-moonlander/actions).
 2.  Select **Fetch and build layout**.
 3.  Click **Run workflow**.
+    *   **Branch**: Select **`main`**.
     *   **Layout ID**: `3aMQz` (Default)
     *   **Geometry**: `moonlander/revb` (Default)
 4.  Wait for the build to finish.
-5.  Download the firmware artifact.
+5.  Download the firmware artifact (`.bin` file).
 
 ## Customization
 
@@ -26,7 +32,7 @@ You can edit `keymap.c`, `rules.mk`, and `config.h` inside that folder to add cu
 To update your layout from Oryx:
 1.  Make changes in Oryx.
 2.  Compile in Oryx (to save the version).
-3.  Run the **Fetch and build layout** workflow again here.
+3.  Run the **Fetch and build layout** workflow again here (using `main`).
     *   This will fetch the new Oryx version to the `oryx` branch.
     *   It will merge the changes into `main`.
     *   It will rebuild the firmware.
