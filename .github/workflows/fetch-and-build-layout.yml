@@ -85,42 +85,79 @@ jobs:
           CHANGE_DESCRIPTION: ${{ steps.download-layout-source.outputs.change_description }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config --local user.name "github-actions"
-          git config --local user.email "github-actions@github.com"
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Configure auth for git push
-          git remote set-url origin https://git:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+          # Use proper actor and token for auth
+          git remote set-url origin https://${{ github.actor }}:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           
           # Create or checkout oryx branch
           git checkout -B oryx
           
           git add .
-          printf "✨(oryx): %s\n" "$CHANGE_DESCRIPTION" | git commit -F - || echo "No layout change"
-          git push -f origin oryx
+          
+          # Commit only if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+             printf "✨(oryx): %s\n" "$CHANGE_DESCRIPTION" | git commit -F - 
+             git push -f origin oryx
+          fi
 
       - name: Merge Oryx with custom QMK
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Ensure we are on main and it's up to date
+          # Reset main to ensure we are clean
           git checkout main
           git pull origin main
           
-          git merge -Xignore-all-space oryx
-          git push origin main
+          # Configure remote again just in case (different step context)
+          git remote set-url origin https://${{ github.actor }}:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+          
+          # Check if there is anything to merge
+          if git merge-base --is-ancestor oryx main; then
+            echo "Already up to date."
+          else
+            git merge -Xignore-all-space oryx
+            git push origin main
+          fi
 
       - name: Update QMK firmware submodule to latest version (${{ steps.download-layout-source.outputs.firmware_version }})
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git submodule update --init --remote --depth=1 --no-single-branch
-          cd qmk_firmware || (git clone https://github.com/zsa/qmk_firmware.git qmk_firmware && cd qmk_firmware)
-          git checkout -B firmware${{ steps.download-layout-source.outputs.firmware_version }} origin/firmware${{ steps.download-layout-source.outputs.firmware_version }}
+          
+          # Ensure qmk_firmware directory exists and is valid
+          if [ ! -d "qmk_firmware" ] || [ -z "$(ls -A qmk_firmware)" ]; then
+             rm -rf qmk_firmware
+             git clone --depth 1 https://github.com/zsa/qmk_firmware.git qmk_firmware
+          fi
+          
+          cd qmk_firmware
+          
+          # Fetch all branches to find the right firmware version
+          git fetch --all --tags
+          
+          # Check if the branch exists
+          FIRMWARE_BRANCH="firmware${{ steps.download-layout-source.outputs.firmware_version }}"
+          if git show-ref --verify --quiet refs/remotes/origin/$FIRMWARE_BRANCH; then
+            git checkout -B $FIRMWARE_BRANCH origin/$FIRMWARE_BRANCH
+          else
+            echo "Warning: Firmware branch $FIRMWARE_BRANCH not found, defaulting to master"
+            git checkout master
+          fi
+          
           git submodule update --init --recursive
           cd ..
+          
+          # Add and commit submodule update if changed
           git add qmk_firmware
-          git commit -m "✨(qmk): Update firmware" || echo "No QMK change"
-          git push origin main
+          if ! git diff --staged --quiet; then
+            git commit -m "✨(qmk): Update firmware" 
+            git push origin main
+          fi
 
       - name: Build qmk docker image
         run: docker build -t qmk .
@@ -142,7 +179,7 @@ jobs:
           mkdir -p ${keyboard_directory}/${{ github.event.inputs.layout_geometry }}/keymaps && cp -r ${{ github.event.inputs.layout_id }} "$_"
           
           # Build the layout
-          docker run -v ./qmk_firmware:/root --rm qmk /bin/sh -c "
+          docker run -v $(pwd)/qmk_firmware:/root --rm qmk /bin/sh -c "
             qmk setup zsa/qmk_firmware -b firmware${{ steps.download-layout-source.outputs.firmware_version }} -y
             make ${make_prefix}${{ github.event.inputs.layout_geometry }}:${{ github.event.inputs.layout_id }}
           "
