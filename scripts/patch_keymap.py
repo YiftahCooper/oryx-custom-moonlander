@@ -6,22 +6,39 @@ import sys
 def _replace_in_keymaps_only(content: str) -> tuple[str, bool]:
     """
     Replace KC_F24 -> TD(TD_SPACE) only inside the keymaps array.
+    Uses permissive keymaps header matching + brace matching for robustness.
     """
-    keymaps_pat = re.compile(
-        r"(const\s+uint16_t\s+PROGMEM\s+keymaps\s*\[\]\s*\[[^\]]+\]\s*\[[^\]]+\]\s*=\s*\{)(.*?)(\};)",
-        re.DOTALL,
-    )
-    m = keymaps_pat.search(content)
+    header_pat = re.compile(r"keymaps\s*\[\]\s*\[[^\]]+\]\s*\[[^\]]+\]", re.DOTALL)
+    m = header_pat.search(content)
     if not m:
         return content, False
 
-    head, body, tail = m.group(1), m.group(2), m.group(3)
+    eq_idx = content.find("=", m.end())
+    if eq_idx == -1:
+        return content, False
+
+    open_brace_idx = content.find("{", eq_idx)
+    if open_brace_idx == -1:
+        return content, False
+
+    close_brace_idx = _find_matching_brace(content, open_brace_idx)
+    if close_brace_idx == -1:
+        return content, False
+
+    body = content[open_brace_idx + 1 : close_brace_idx]
     if "KC_F24" not in body:
         return content, False
 
     body2 = body.replace("KC_F24", "TD(TD_SPACE)")
-    content2 = content[: m.start()] + head + body2 + tail + content[m.end() :]
+    content2 = content[: open_brace_idx + 1] + body2 + content[close_brace_idx:]
     return content2, True
+
+
+def _replace_kc_f24_fallback(content: str) -> tuple[str, bool]:
+    """Fallback replacement when keymaps block parsing fails due upstream format drift."""
+    replaced, n = re.subn(r"\bKC_F24\b", "TD(TD_SPACE)", content)
+    return replaced, n > 0
+
 
 
 def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
@@ -94,10 +111,16 @@ void td_space_reset(tap_dance_state_t *state, void *user_data) {
 // --------------------------
 """
 
-    # 2) Replace KC_F24 safely (keymaps[] only)
+        # 2) Replace KC_F24 safely (keymaps[] only), fallback globally if parsing drifted.
     content, replaced = _replace_in_keymaps_only(content)
     if replaced:
         print("Replaced KC_F24 with TD(TD_SPACE) inside keymaps[]")
+    elif "KC_F24" in content:
+        content, replaced_fallback = _replace_kc_f24_fallback(content)
+        if replaced_fallback:
+            print("Replaced KC_F24 with TD(TD_SPACE) via fallback token replacement")
+        else:
+            print("Warning: KC_F24 replacement fallback did not change content")
     else:
         print("Warning: KC_F24 not replaced (keymaps[] block not found or KC_F24 absent).")
 
