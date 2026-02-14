@@ -1,67 +1,83 @@
 import os
-import sys
 import re
+import sys
 
-def patch_keymap(layout_dir, custom_code_path):
-    keymap_path = os.path.join(layout_dir, 'keymap.c')
-    
+
+def _replace_in_keymaps_only(content: str) -> tuple[str, bool]:
+    """
+    Replace KC_F24 -> TD(TD_SPACE) only inside the keymaps array.
+    """
+    keymaps_pat = re.compile(
+        r"(const\s+uint16_t\s+PROGMEM\s+keymaps\s*\[\]\s*\[[^\]]+\]\s*\[[^\]]+\]\s*=\s*\{)(.*?)(\};)",
+        re.DOTALL,
+    )
+    m = keymaps_pat.search(content)
+    if not m:
+        return content, False
+
+    head, body, tail = m.group(1), m.group(2), m.group(3)
+    if "KC_F24" not in body:
+        return content, False
+
+    body2 = body.replace("KC_F24", "TD(TD_SPACE)")
+    content2 = content[: m.start()] + head + body2 + tail + content[m.end() :]
+    return content2, True
+
+
+def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
+    keymap_path = os.path.join(layout_dir, "keymap.c")
     if not os.path.exists(keymap_path):
         print(f"Error: {keymap_path} not found")
-        # List dir to debug
         print(f"Contents of {layout_dir}:")
         for f in os.listdir(layout_dir):
             print(f)
         sys.exit(1)
-        
-    with open(keymap_path, 'r') as f:
+
+    with open(keymap_path, "r", encoding="utf-8") as f:
         content = f.read()
 
     print("Found keymap.c, length:", len(content))
 
-    # =========================================================================
-    # 1. Inject TD_SPACE Logic
-    # =========================================================================
-    
-    # A. Inject Enum Value
-    # Find "enum tap_dance_codes {" and insert TD_SPACE before the closing brace or specific marker
-    # Oryx usually ends with "};"
-    enum_pattern = r'(enum\s+tap_dance_codes\s*\{)([^}]*)(\};)'
-    match = re.search(enum_pattern, content, re.DOTALL)
-    if match:
+    # 1) Inject TD_SPACE into enum
+    enum_pattern = r"(enum\s+tap_dance_codes\s*\{)([^}]*)(\};)"
+    m = re.search(enum_pattern, content, re.DOTALL)
+    if m:
         print("Found tap_dance_codes enum")
-        # Check if TD_SPACE is already there (unlikely unless user added it)
-        if "TD_SPACE" not in match.group(2):
-            # Insert TD_SPACE before the end
-            # If TAP_DANCE_COUNT exists, put it before that.
-            if "TAP_DANCE_COUNT" in match.group(2):
-                new_enum_body = match.group(2).replace("TAP_DANCE_COUNT", "TD_SPACE,\n  TAP_DANCE_COUNT")
+        if "TD_SPACE" not in m.group(2):
+            if "TAP_DANCE_COUNT" in m.group(2):
+                new_body = m.group(2).replace("TAP_DANCE_COUNT", "TD_SPACE,\n    TAP_DANCE_COUNT")
             else:
-                new_enum_body = match.group(2) + "\n  TD_SPACE,"
-            
-            content = content.replace(match.group(0), match.group(1) + new_enum_body + match.group(3))
+                new_body = m.group(2) + "\n    TD_SPACE,"
+            content = content.replace(m.group(0), m.group(1) + new_body + m.group(3))
             print("Injected TD_SPACE into enum")
     else:
-        print("Warning: Could not find tap_dance_codes enum. Creating one?")
-        # If no tap dance exists yet, we might need to create the whole block.
-        # But Oryx usually has it if any tap dance is used.
-        # If not, we might fail to compile if we assume it exists.
-        pass
+        print("Warning: Could not find tap_dance_codes enum (TD_SPACE enum not injected).")
 
-    # B. Inject Tap Dance Action
-    # Find "tap_dance_action_t tap_dance_actions[] = {"
-    action_pattern = r'(tap_dance_action_t\s+tap_dance_actions\[\]\s*=\s*\{)([^}]*)(\};)'
-    match = re.search(action_pattern, content, re.DOTALL)
-    if match:
+    # 1b) Ensure prototypes exist before tap_dance_actions[]
+    td_prototypes = (
+        "\n// --- TD_SPACE prototypes (injected) ---\n"
+        "void td_space_finished(tap_dance_state_t *state, void *user_data);\n"
+        "void td_space_reset(tap_dance_state_t *state, void *user_data);\n"
+        "// -------------------------------------\n"
+    )
+
+    # 1c) Inject action entry
+    action_pattern = r"(tap_dance_action_t\s+tap_dance_actions\[\]\s*=\s*\{)([^}]*)(\};)"
+    m = re.search(action_pattern, content, re.DOTALL)
+    if m:
         print("Found tap_dance_actions array")
-        if "TD_SPACE" not in match.group(2):
-            # Add our action
-            new_action = "\n  [TD_SPACE] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, td_space_finished, td_space_reset),"
-            content = content.replace(match.group(0), match.group(1) + match.group(2) + new_action + match.group(3))
-            print("Injected TD_SPACE action")
+        if "td_space_finished" not in content[: m.start()]:
+            content = content[: m.start()] + td_prototypes + content[m.start() :]
+            m = re.search(action_pattern, content, re.DOTALL)
 
-    # C. Inject Helper Functions
-    # We'll append these to the end or put them in the wrapper
-    td_logic_code = """
+        if m and "TD_SPACE" not in m.group(2):
+            new_action = "\n    [TD_SPACE] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, td_space_finished, td_space_reset),"
+            content = content.replace(m.group(0), m.group(1) + m.group(2) + new_action + m.group(3))
+            print("Injected TD_SPACE action")
+    else:
+        print("Warning: Could not find tap_dance_actions array (TD_SPACE action not injected).")
+
+    td_logic_code = r"""
 // --- TD_SPACE Injection ---
 void td_space_finished(tap_dance_state_t *state, void *user_data) {
     if (state->count == 1) {
@@ -77,67 +93,49 @@ void td_space_reset(tap_dance_state_t *state, void *user_data) {
 }
 // --------------------------
 """
-    
-    # =========================================================================
-    # 2. Keymap Replacement
-    # =========================================================================
-    
-    # Replace KC_F24 with TD(TD_SPACE)
-    # This allows the user to map a specific key in Oryx to F24, and we hijack it.
-    if "KC_F24" in content:
-        content = content.replace("KC_F24", "TD(TD_SPACE)")
-        print("Replaced KC_F24 with TD(TD_SPACE)")
+
+    # 2) Replace KC_F24 safely (keymaps[] only)
+    content, replaced = _replace_in_keymaps_only(content)
+    if replaced:
+        print("Replaced KC_F24 with TD(TD_SPACE) inside keymaps[]")
     else:
-        print("Warning: KC_F24 not found. Make sure you mapped the key to F24 in Oryx!")
+        print("Warning: KC_F24 not replaced (keymaps[] block not found or KC_F24 absent).")
 
-    # =========================================================================
-    # 3. Hook process_record_user
-    # =========================================================================
-
-    pattern = r'bool\s+process_record_user\s*\('
+    # 3) Hook process_record_user
+    pattern = r"bool\s+process_record_user\s*\("
     if not re.search(pattern, content):
         print("Error: Could not find process_record_user in keymap.c")
-        # Print first 500 chars to help debug
         print("File start:", content[:500])
         sys.exit(1)
-        
-    content = re.sub(pattern, 'bool process_record_user_oryx(', content)
 
-    wrapper_code = """
-// ============================================================
-// INJECTED BY ORYX-CUSTOM-MOONLANDER WORKFLOW
-// ============================================================
+    content = re.sub(pattern, "bool process_record_user_oryx(", content, count=1)
 
-// Forward declaration of the Oryx function we renamed
-bool process_record_user_oryx(uint16_t keycode, keyrecord_t *record);
+    wrapper_code = (
+        "\n\n// ============================================================\n"
+        "// INJECTED BY ORYX-CUSTOM-MOONLANDER WORKFLOW\n"
+        "// ============================================================\n"
+        "bool process_record_user_oryx(uint16_t keycode, keyrecord_t *record);\n"
+        '#include "custom_code.c"\n'
+        + td_logic_code
+        + "\n"
+        "bool process_record_user(uint16_t keycode, keyrecord_t *record) {\n"
+        "    if (!process_record_user_custom(keycode, record)) {\n"
+        "        return false;\n"
+        "    }\n"
+        "    return process_record_user_oryx(keycode, record);\n"
+        "}\n"
+    )
 
-// Include user custom code
-#include "custom_code.c"
-
-// TD_SPACE Logic
-""" + td_logic_code + """
-
-// Main entry point called by QMK
-bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-  // 1. Run custom logic first
-  if (!process_record_user_custom(keycode, record)) {
-    return false; // Custom code handled it and requested stop
-  }
-  
-  // 2. Fallback to Oryx logic
-  return process_record_user_oryx(keycode, record);
-}
-"""
     content += wrapper_code
 
-    with open(keymap_path, 'w') as f:
+    with open(keymap_path, "w", encoding="utf-8") as f:
         f.write(content)
-    
+
     print("Successfully patched keymap.c")
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: patch_keymap.py <layout_dir> <custom_code_path>")
         sys.exit(1)
-        
     patch_keymap(sys.argv[1], sys.argv[2])

@@ -59,6 +59,7 @@ jobs:
             change_description="latest layout modification made with Oryx"
           fi
           
+          echo "Resolved Oryx latest revision: hash_id=${hash_id}, layout_id=${{ github.event.inputs.layout_id }}, geometry=${{ github.event.inputs.layout_geometry }}"
           echo "Downloading source for hash: $hash_id"
           curl -L "https://oryx.zsa.io/source/${hash_id}" -o source.zip
           
@@ -70,6 +71,7 @@ jobs:
           
           echo firmware_version=${firmware_version} >> "$GITHUB_OUTPUT"
           echo change_description=${change_description} >> "$GITHUB_OUTPUT"
+          echo hash_id=${hash_id} >> "$GITHUB_OUTPUT"
 
       - name: Unzip the source file
         run: |
@@ -77,12 +79,23 @@ jobs:
           unzip -oj source.zip '*_source/*' -d oryx_source
           rm source.zip
 
+      - name: Verify downloaded Oryx source before patch
+        run: |
+          set -euo pipefail
+
+          echo "Verifying source for layout_id=${{ github.event.inputs.layout_id }} geometry=${{ github.event.inputs.layout_geometry }} hash_id=${{ steps.download-layout-source.outputs.hash_id }}"
+
+          test -f oryx_source/keymap.c
+          F24_COUNT=$( (grep -o "KC_F24" oryx_source/keymap.c || true) | wc -l | tr -d ' ' )
+          echo "KC_F24 occurrences before patch: ${F24_COUNT}"
+
+          if [ "${F24_COUNT}" -lt 1 ]; then
+            echo "ERROR: KC_F24 was not found in downloaded Oryx keymap.c before patch. Failing fast to avoid building the wrong layout revision."
+            exit 1
+          fi
+
       - name: Inject Custom Code (The Clever Bit)
         run: |
-          # Debug: List files
-          echo "Files in oryx_source before patch:"
-          ls -R oryx_source
-          
           # Copy custom code to the source directory
           cp custom_qmk/custom_code.c oryx_source/
           
@@ -91,6 +104,29 @@ jobs:
           
           # Now move the patched folder to the expected layout ID name
           mv oryx_source ${{ github.event.inputs.layout_id }}
+
+      - name: Verify patched keymap invariants
+        run: |
+          set -euo pipefail
+
+          LAYOUT_ID="${{ github.event.inputs.layout_id }}"
+          KEYMAP_PATH="${LAYOUT_ID}/keymap.c"
+          test -f "${KEYMAP_PATH}"
+
+          TD_COUNT=$( (grep -o "TD(TD_SPACE)" "${KEYMAP_PATH}" || true) | wc -l | tr -d ' ' )
+          F24_AFTER=$( (grep -o "KC_F24" "${KEYMAP_PATH}" || true) | wc -l | tr -d ' ' )
+          echo "TD(TD_SPACE) occurrences after patch: ${TD_COUNT}"
+          echo "KC_F24 occurrences after patch: ${F24_AFTER}"
+
+          if [ "${TD_COUNT}" -lt 1 ]; then
+            echo "ERROR: TD(TD_SPACE) not found after patch; injection did not apply."
+            exit 1
+          fi
+
+          if [ "${F24_AFTER}" -gt 0 ]; then
+            echo "ERROR: KC_F24 still present after patch; expected replacement did not complete."
+            exit 1
+          fi
 
       - name: Update QMK firmware submodule
         env:
@@ -143,3 +179,32 @@ jobs:
         with:
           name: ${{ steps.build-layout.outputs.normalized_layout_geometry }}_${{ github.event.inputs.layout_id }}
           path: ${{ steps.build-layout.outputs.built_layout_file }}
+
+      - name: Commit synced layout folder to repository branch
+        if: ${{ success() }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="${GITHUB_REF_NAME:-main}"
+          LAYOUT_ID="${{ github.event.inputs.layout_id }}"
+          MSG="${{ steps.download-layout-source.outputs.change_description }}"
+          HASH_ID="${{ steps.download-layout-source.outputs.hash_id }}"
+          GEOMETRY="${{ github.event.inputs.layout_geometry }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Do NOT checkout/reset here; we want to keep the freshly generated layout files
+          # from this run in the current workspace.
+
+          # Stage only the synced layout directory
+          git add "${LAYOUT_ID}"
+
+          if git diff --cached --quiet; then
+            echo "No layout changes to commit for ${LAYOUT_ID}."
+            exit 0
+          fi
+
+          git commit -m "${MSG:-Sync Oryx layout source} [oryx:${HASH_ID:-unknown} geom:${GEOMETRY}]"
+          git push origin "HEAD:${BRANCH}"
+
