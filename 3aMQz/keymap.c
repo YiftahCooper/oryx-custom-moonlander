@@ -1,5 +1,11 @@
 #include QMK_KEYBOARD_H
 #include "version.h"
+
+// --- Custom language hooks (injected) ---
+void custom_language_toggled(void);
+void custom_language_resync(void);
+void custom_language_rgb_indicator(void);
+// ----------------------------------------
 #define MOON_LED_LEVEL LED_LEVEL
 #ifndef ZSA_SAFE_RANGE
 #define ZSA_SAFE_RANGE SAFE_RANGE
@@ -176,6 +182,7 @@ bool rgb_matrix_indicators_user(void) {
     RGB rgb = hsv_to_rgb_with_value((HSV) { 110, 252, 242 });
     rgb_matrix_set_color( 32, rgb.r, rgb.g, rgb.b );
   } 
+  custom_language_rgb_indicator(); /* ORYX_LANG_RGB_PATCH */
   return true;
 }
 
@@ -251,23 +258,23 @@ void dance_1_reset(tap_dance_state_t *state, void *user_data);
 
 void on_dance_1(tap_dance_state_t *state, void *user_data) {
     if(state->count == 3) {
-        tap_code16(LALT(KC_LEFT_SHIFT));
-        tap_code16(LALT(KC_LEFT_SHIFT));
-        tap_code16(LALT(KC_LEFT_SHIFT));
+        tap_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */
+        tap_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */
+        tap_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */
     }
     if(state->count > 3) {
-        tap_code16(LALT(KC_LEFT_SHIFT));
+        tap_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */
     }
 }
 
 void dance_1_finished(tap_dance_state_t *state, void *user_data) {
     dance_state[1].step = dance_step(state);
     switch (dance_state[1].step) {
-        case SINGLE_TAP: register_code16(LALT(KC_LEFT_SHIFT)); break;
+        case SINGLE_TAP: register_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */ break;
         case SINGLE_HOLD: register_code16(KC_LEFT_CTRL); break;
-        case DOUBLE_TAP: register_code16(LALT(KC_LEFT_SHIFT)); register_code16(LALT(KC_LEFT_SHIFT)); break;
-        case DOUBLE_HOLD: register_code16(KC_F23); break;
-        case DOUBLE_SINGLE_TAP: tap_code16(LALT(KC_LEFT_SHIFT)); register_code16(LALT(KC_LEFT_SHIFT));
+        case DOUBLE_TAP: register_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */ register_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */ break;
+        case DOUBLE_HOLD: custom_language_resync(); break; /* ORYX_LANG_RESYNC_PATCH */
+        case DOUBLE_SINGLE_TAP: tap_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */ register_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); /* ORYX_LANG_TOGGLE_PATCH */
     }
 }
 
@@ -277,7 +284,7 @@ void dance_1_reset(tap_dance_state_t *state, void *user_data) {
         case SINGLE_TAP: unregister_code16(LALT(KC_LEFT_SHIFT)); break;
         case SINGLE_HOLD: unregister_code16(KC_LEFT_CTRL); break;
         case DOUBLE_TAP: unregister_code16(LALT(KC_LEFT_SHIFT)); break;
-        case DOUBLE_HOLD: unregister_code16(KC_F23); break;
+        case DOUBLE_HOLD: break; /* ORYX_LANG_RESYNC_PATCH */
         case DOUBLE_SINGLE_TAP: unregister_code16(LALT(KC_LEFT_SHIFT)); break;
     }
     dance_state[1].step = 0;
