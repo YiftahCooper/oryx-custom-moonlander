@@ -39,8 +39,7 @@ enum tap_dance_codes {
   DANCE_4,
   DANCE_5,
   DANCE_6,
-
-    TD_SPACE,};
+};
 
 #define DUAL_FUNC_0 LT(10, KC_F9)
 #define DUAL_FUNC_1 LT(1, KC_D)
@@ -403,7 +402,7 @@ void dance_5_finished(tap_dance_state_t *state, void *user_data) {
     dance_state[5].step = dance_step(state);
     switch (dance_state[5].step) {
         case SINGLE_TAP: register_code16(KC_SPACE); break;
-        case DOUBLE_TAP: register_code16(TD(TD_SPACE)); break;
+        case DOUBLE_TAP: tap_code16(KC_KP_DOT); register_code16(KC_SPACE); break; /* ORYX_FN24_NUMDOT_SPACE_PATCH */
         case DOUBLE_SINGLE_TAP: tap_code16(KC_SPACE); register_code16(KC_SPACE);
     }
 }
@@ -412,7 +411,7 @@ void dance_5_reset(tap_dance_state_t *state, void *user_data) {
     wait_ms(10);
     switch (dance_state[5].step) {
         case SINGLE_TAP: unregister_code16(KC_SPACE); break;
-        case DOUBLE_TAP: unregister_code16(TD(TD_SPACE)); break;
+        case DOUBLE_TAP: unregister_code16(KC_SPACE); break; /* ORYX_FN24_NUMDOT_SPACE_PATCH */
         case DOUBLE_SINGLE_TAP: unregister_code16(KC_SPACE); break;
     }
     dance_state[5].step = 0;
@@ -453,11 +452,6 @@ void dance_6_reset(tap_dance_state_t *state, void *user_data) {
     dance_state[6].step = 0;
 }
 
-
-// --- TD_SPACE prototypes (injected) ---
-void td_space_finished(tap_dance_state_t *state, void *user_data);
-void td_space_reset(tap_dance_state_t *state, void *user_data);
-// -------------------------------------
 tap_dance_action_t tap_dance_actions[] = {
         [DANCE_0] = ACTION_TAP_DANCE_FN_ADVANCED(on_dance_0, dance_0_finished, dance_0_reset),
         [DANCE_1] = ACTION_TAP_DANCE_FN_ADVANCED(on_dance_1, dance_1_finished, dance_1_reset),
@@ -466,8 +460,7 @@ tap_dance_action_t tap_dance_actions[] = {
         [DANCE_4] = ACTION_TAP_DANCE_FN_ADVANCED(on_dance_4, dance_4_finished, dance_4_reset),
         [DANCE_5] = ACTION_TAP_DANCE_FN_ADVANCED(on_dance_5, dance_5_finished, dance_5_reset),
         [DANCE_6] = ACTION_TAP_DANCE_FN_ADVANCED(on_dance_6, dance_6_finished, dance_6_reset),
-
-    [TD_SPACE] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, td_space_finished, td_space_reset),};
+};
 
 bool process_record_user_oryx(uint16_t keycode, keyrecord_t *record) {
   switch (keycode) {
@@ -659,21 +652,6 @@ bool process_record_user_oryx(uint16_t keycode, keyrecord_t *record) {
 // ============================================================
 bool process_record_user_oryx(uint16_t keycode, keyrecord_t *record);
 #include "custom_code.c"
-
-// --- TD_SPACE Injection ---
-void td_space_finished(tap_dance_state_t *state, void *user_data) {
-    if (state->count == 1) {
-        tap_code(KC_SPACE);
-    } else if (state->count == 2) {
-        tap_code(KC_KP_DOT);
-        tap_code(KC_SPACE);
-    }
-}
-
-void td_space_reset(tap_dance_state_t *state, void *user_data) {
-    // No cleanup needed
-}
-// --------------------------
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (!process_record_user_custom(keycode, record)) {
