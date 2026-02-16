@@ -1,6 +1,3 @@
-#undef TAPPING_TERM
-#define TAPPING_TERM 66
-
 #define RETRO_TAPPING
 
 #define TAP_CODE_DELAY 10
@@ -11,7 +8,7 @@
 #define NO_AUTO_SHIFT_TAB
 #define NO_AUTO_SHIFT_ALPHA
 #define CAPS_LOCK_STATUS
-#define SERIAL_NUMBER "3aMQz/GGqKKA"
+#define SERIAL_NUMBER "3aMQz/yo4pOJ"
 #define LAYER_STATE_8BIT
 
 #define RGB_MATRIX_STARTUP_SPD 60
