@@ -9,6 +9,8 @@ enum user_custom_keycodes {
 
 static bool language_state_known = false;
 static bool language_is_hebrew = false;
+// LED 27 maps to the DANCE_1 key; avoid LED 32 because Oryx uses it for Caps Lock.
+static const uint8_t LANGUAGE_INDICATOR_LED = 27;
 
 void custom_language_toggled(void) {
     if (!language_state_known) {
@@ -44,7 +46,7 @@ void custom_language_rgb_indicator(void) {
         b = 255;
     }
 
-    rgb_matrix_set_color(32, r, g, b);
+    rgb_matrix_set_color(LANGUAGE_INDICATOR_LED, r, g, b);
 #endif
 }
 
