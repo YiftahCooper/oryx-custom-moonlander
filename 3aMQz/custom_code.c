@@ -9,8 +9,20 @@ enum user_custom_keycodes {
 
 static bool language_state_known = false;
 static bool language_is_hebrew = false;
-// LED 27 maps to the DANCE_1 key; avoid LED 32 because Oryx uses it for Caps Lock.
-static const uint8_t LANGUAGE_INDICATOR_LED = 27;
+// DANCE_1 is on matrix [4,0] in this Moonlander layout.
+static const uint8_t LANGUAGE_INDICATOR_ROW = 4;
+static const uint8_t LANGUAGE_INDICATOR_COL = 0;
+
+static uint8_t custom_language_indicator_led(void) {
+#ifdef RGB_MATRIX_ENABLE
+    if (LANGUAGE_INDICATOR_ROW >= MATRIX_ROWS || LANGUAGE_INDICATOR_COL >= MATRIX_COLS) {
+        return NO_LED;
+    }
+    return g_led_config.matrix_co[LANGUAGE_INDICATOR_ROW][LANGUAGE_INDICATOR_COL];
+#else
+    return NO_LED;
+#endif
+}
 
 void custom_language_toggled(void) {
     if (!language_state_known) {
@@ -46,7 +58,10 @@ void custom_language_rgb_indicator(void) {
         b = 255;
     }
 
-    rgb_matrix_set_color(LANGUAGE_INDICATOR_LED, r, g, b);
+    uint8_t led = custom_language_indicator_led();
+    if (led != NO_LED) {
+        rgb_matrix_set_color(led, r, g, b);
+    }
 #endif
 }
 

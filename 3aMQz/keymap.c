@@ -47,10 +47,10 @@ enum tap_dance_codes {
   DANCE_6,
 };
 
-#define DUAL_FUNC_0 LT(14, KC_V)
-#define DUAL_FUNC_1 LT(5, KC_8)
-#define DUAL_FUNC_2 LT(8, KC_H)
-#define DUAL_FUNC_3 LT(14, KC_F15)
+#define DUAL_FUNC_0 LT(15, KC_F1)
+#define DUAL_FUNC_1 LT(8, KC_F9)
+#define DUAL_FUNC_2 LT(9, KC_F23)
+#define DUAL_FUNC_3 LT(14, KC_A)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_moonlander(
@@ -100,13 +100,13 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
         case TD(DANCE_1):
-            return TAPPING_TERM -120;
+            return TAPPING_TERM -80;
         case MT(MOD_RALT, KC_TAB):
-            return TAPPING_TERM -120;
+            return TAPPING_TERM -60;
         case TD(DANCE_2):
             return TAPPING_TERM -110;
         case MT(MOD_RCTL, KC_PSCR):
-            return TAPPING_TERM -134;
+            return TAPPING_TERM -110;
         case MEH_T(KC_PAGE_UP):
             return TAPPING_TERM -120;
         case ALL_T(KC_PGDN):
