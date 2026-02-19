@@ -7,6 +7,7 @@ PATCH_MARKER = "ORYX_FN24_NUMDOT_SPACE_PATCH"
 LANGUAGE_TOGGLE_MARKER = "ORYX_LANG_TOGGLE_PATCH"
 LANGUAGE_RESYNC_MARKER = "ORYX_LANG_RESYNC_PATCH"
 LANGUAGE_RGB_MARKER = "ORYX_LANG_RGB_PATCH"
+LANGUAGE_HOLD_PREF_MARKER = "ORYX_LANG_HOLD_PREF_PATCH"
 LANGUAGE_TAP_TERM_MARKER = "ORYX_LANG_TAP_TERM_PATCH"
 TAPHOLD_COMPAT_MARKER = "ORYX_TAPHOLD_FALLBACK_PATCH"
 DOUBLETAP_COMPAT_MARKER = "ORYX_DOUBLETAP_FALLBACK_PATCH"
@@ -272,6 +273,21 @@ def _patch_language_switch_tap_dance(content: str, dance_indices: list[int]) -> 
     finished_body, has_finished = _get_function_body(content, finished_name)
     if has_finished:
         finished_body_new = finished_body
+
+        # Prefer hold (Ctrl) when the language key is interrupted by another key.
+        # This makes fast chords resolve to hold instead of accidental tap-toggles.
+        if LANGUAGE_HOLD_PREF_MARKER not in finished_body_new:
+            step_assign_pat = re.compile(
+                rf"dance_state\s*\[\s*{language_dance_idx}\s*\]\.step\s*=\s*dance_step\s*\(\s*state\s*\)\s*;"
+            )
+            step_assign_replacement = (
+                "if (state->count == 1 && state->interrupted) {\n"
+                f"        dance_state[{language_dance_idx}].step = SINGLE_HOLD; /* {LANGUAGE_HOLD_PREF_MARKER} */\n"
+                "    } else {\n"
+                f"        dance_state[{language_dance_idx}].step = dance_step(state);\n"
+                "    }"
+            )
+            finished_body_new, _ = step_assign_pat.subn(step_assign_replacement, finished_body_new, count=1)
 
         finished_body_new, single_tap_patched = _replace_case_block(
             finished_body_new,
