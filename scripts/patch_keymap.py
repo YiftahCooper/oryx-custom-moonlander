@@ -143,47 +143,71 @@ def _replace_fn24_in_space_tap_dance(content: str) -> tuple[str, bool]:
       DOUBLE_TAP and DOUBLE_SINGLE_TAP => num-dot then space.
     Target only dance_<n>_finished/reset function bodies.
     """
+    def _replace_case(
+        body: str,
+        case_name: str,
+        replacement_builder: callable,
+    ) -> tuple[str, bool]:
+        case_pat = re.compile(
+            rf"(?P<indent>^[ \t]*)case\s+{case_name}\s*:\s*.*?(?=^[ \t]*case\s+|^[ \t]*default\s*:|}})",
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        match = case_pat.search(body)
+        if not match:
+            return body, False
+
+        indent = match.group("indent")
+        replacement = replacement_builder(indent)
+        return case_pat.sub(replacement + "\n", body, count=1), True
+
     for dance_idx in range(0, 24):
         finished_name = f"dance_{dance_idx}_finished"
         reset_name = f"dance_{dance_idx}_reset"
 
         finished_body, has_finished = _get_function_body(content, finished_name)
-        if not has_finished or "KC_F24" not in finished_body:
+        if not has_finished:
             continue
 
-        finished_body_new, finished_n = re.subn(
-            r"case\s+DOUBLE_TAP\s*:\s*(?:register_code16|tap_code16)\s*\(\s*KC_F24\s*\)\s*;\s*break\s*;",
-            f"case DOUBLE_TAP: tap_code16(KC_KP_DOT); tap_code16(KC_SPACE); break; /* {PATCH_MARKER} */",
-            finished_body,
-            count=1,
-        )
-        if finished_n == 0:
+        if "KC_F24" not in finished_body and PATCH_MARKER not in finished_body:
             continue
 
-        finished_body_new, _ = re.subn(
-            r"case\s+DOUBLE_SINGLE_TAP\s*:\s*tap_code16\s*\(\s*KC_SPACE\s*\)\s*;\s*register_code16\s*\(\s*KC_SPACE\s*\)\s*;?\s*(?:break\s*;)?",
-            f"case DOUBLE_SINGLE_TAP: tap_code16(KC_KP_DOT); tap_code16(KC_SPACE); break; /* {PATCH_MARKER} */",
+        finished_body_new = finished_body
+        finished_body_new, replaced_double_tap = _replace_case(
             finished_body_new,
-            count=1,
+            "DOUBLE_TAP",
+            lambda indent: (
+                f"{indent}case DOUBLE_TAP: tap_code16(KC_KP_DOT); tap_code16(KC_SPACE); "
+                f"break; /* {PATCH_MARKER} */"
+            ),
         )
+        finished_body_new, replaced_double_single = _replace_case(
+            finished_body_new,
+            "DOUBLE_SINGLE_TAP",
+            lambda indent: (
+                f"{indent}case DOUBLE_SINGLE_TAP: tap_code16(KC_KP_DOT); tap_code16(KC_SPACE); "
+                f"break; /* {PATCH_MARKER} */"
+            ),
+        )
+
+        if not replaced_double_tap and not replaced_double_single:
+            continue
+
         content = _replace_function_body(content, finished_name, finished_body_new)
 
         reset_body, has_reset = _get_function_body(content, reset_name)
         if has_reset:
-            reset_body_new, reset_n = re.subn(
-                r"case\s+DOUBLE_TAP\s*:\s*(?:unregister_code16|tap_code16)\s*\(\s*KC_F24\s*\)\s*;\s*break\s*;",
-                f"case DOUBLE_TAP: break; /* {PATCH_MARKER} */",
-                reset_body,
-                count=1,
+            reset_body_new = reset_body
+            reset_body_new, _ = _replace_case(
+                reset_body_new,
+                "DOUBLE_TAP",
+                lambda indent: f"{indent}case DOUBLE_TAP: break; /* {PATCH_MARKER} */",
             )
-            if reset_n > 0:
-                reset_body_new, _ = re.subn(
-                    r"case\s+DOUBLE_SINGLE_TAP\s*:\s*unregister_code16\s*\(\s*KC_SPACE\s*\)\s*;\s*break\s*;",
-                    f"case DOUBLE_SINGLE_TAP: break; /* {PATCH_MARKER} */",
-                    reset_body_new,
-                    count=1,
-                )
-                content = _replace_function_body(content, reset_name, reset_body_new)
+            reset_body_new, _ = _replace_case(
+                reset_body_new,
+                "DOUBLE_SINGLE_TAP",
+                lambda indent: f"{indent}case DOUBLE_SINGLE_TAP: break; /* {PATCH_MARKER} */",
+            )
+            content = _replace_function_body(content, reset_name, reset_body_new)
 
         return content, True
 
@@ -534,13 +558,29 @@ def _clone_double_tap_to_double_single(body: str) -> tuple[str, bool]:
     if "case DOUBLE_HOLD:" in body:
         return body, False
 
-    if DOUBLETAP_COMPAT_MARKER in body:
+    # Preserve dances with custom double-tap handling patched elsewhere.
+    if PATCH_MARKER in body:
+        return body, False
+
+    double_single_pat = re.compile(
+        r"(?P<indent>^[ \t]*)case\s+DOUBLE_SINGLE_TAP\s*:\s*.*?(?=^[ \t]*case\s+|^[ \t]*default\s*:|})",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+
+    # Repair previously malformed marker rewrites before deciding idempotency.
+    malformed_existing = re.search(
+        rf"case\s+DOUBLE_SINGLE_TAP\s*:.*?/\*\s*{re.escape(DOUBLETAP_COMPAT_MARKER)}\s*\*/\S",
+        body,
+        flags=re.DOTALL,
+    )
+
+    if DOUBLETAP_COMPAT_MARKER in body and not malformed_existing:
         return body, False
 
     double_tap_case = re.search(
-        r"(?P<indent>[ \t]*)case\s+DOUBLE_TAP\s*:\s*(?P<action>.*?)\s*break\s*;",
+        r"(?P<indent>^[ \t]*)case\s+DOUBLE_TAP\s*:\s*(?P<action>.*?)\s*break\s*;\s*(?=^[ \t]*case\s+|^[ \t]*default\s*:|})",
         body,
-        flags=re.DOTALL,
+        flags=re.MULTILINE | re.DOTALL,
     )
     if not double_tap_case:
         return body, False
@@ -556,17 +596,11 @@ def _clone_double_tap_to_double_single(body: str) -> tuple[str, bool]:
     )
 
     if "case DOUBLE_SINGLE_TAP:" in body:
-        body_new, replaced = re.subn(
-            r"(?P<indent>[ \t]*)case\s+DOUBLE_SINGLE_TAP\s*:\s*.*?(?:\s*break\s*;)?",
-            replacement_case,
-            body,
-            count=1,
-            flags=re.DOTALL,
-        )
+        body_new, replaced = double_single_pat.subn(replacement_case + "\n", body, count=1)
         return body_new, replaced > 0
 
-    injected_case = f"{double_tap_case.group(0)}\n{replacement_case}"
-    body_new = body[: double_tap_case.start()] + injected_case + body[double_tap_case.end() :]
+    insert_idx = double_tap_case.end()
+    body_new = body[:insert_idx] + f"\n{replacement_case}" + body[insert_idx:]
     return body_new, True
 
 

@@ -8,7 +8,7 @@ enum user_custom_keycodes {
 };
 
 static bool language_is_hebrew = false;
-// DANCE_1 is on matrix [4,0] in this Moonlander layout.
+// The language tap-dance key is on matrix [4,0] in this Moonlander layout.
 static const uint8_t LANGUAGE_INDICATOR_ROW = 4;
 static const uint8_t LANGUAGE_INDICATOR_COL = 0;
 static const uint8_t LANGUAGE_ENGLISH_R = 40;
@@ -66,14 +66,9 @@ bool process_record_user_custom(uint16_t keycode, keyrecord_t *record) {
         return true;
     }
 
+    // Language toggling is handled in patched tap-dance handlers.
+    // Keep this hook available for future custom key logic.
     switch (keycode) {
-        case LALT(KC_LEFT_SHIFT):
-            custom_language_toggled();
-            break;
-        // Example:
-        // case MY_CUSTOM_MACRO:
-        //     if (record->event.pressed) { SEND_STRING("Hello World"); }
-        //     return false;
         default:
             break;
     }
