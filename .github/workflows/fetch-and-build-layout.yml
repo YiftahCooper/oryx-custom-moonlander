@@ -228,6 +228,19 @@ jobs:
           name: ${{ steps.build-layout.outputs.normalized_layout_geometry }}_${{ github.event.inputs.layout_id }}
           path: ${{ steps.build-layout.outputs.built_layout_file }}
 
+      - name: Publish firmware release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: firmware-${{ steps.build-layout.outputs.normalized_layout_geometry }}-${{ github.event.inputs.layout_id }}-${{ steps.download-layout-source.outputs.hash_id }}
+          name: Firmware ${{ steps.build-layout.outputs.normalized_layout_geometry }} ${{ github.event.inputs.layout_id }} @ ${{ steps.download-layout-source.outputs.hash_id }}
+          body: |
+            Built from Oryx layout `${{ github.event.inputs.layout_id }}` (`${{ github.event.inputs.layout_geometry }}`)
+            Oryx revision hash: `${{ steps.download-layout-source.outputs.hash_id }}`
+            Source change description: `${{ steps.download-layout-source.outputs.change_description }}`
+          files: ${{ steps.build-layout.outputs.built_layout_file }}
+          fail_on_unmatched_files: true
+          overwrite_files: true
+
       - name: Commit synced layout folder to repository branch
         if: ${{ success() }}
         run: |
