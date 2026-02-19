@@ -6,10 +6,13 @@ PATCH_MARKER = "ORYX_FN24_NUMDOT_SPACE_PATCH"
 LANGUAGE_TOGGLE_MARKER = "ORYX_LANG_TOGGLE_PATCH"
 LANGUAGE_RESYNC_MARKER = "ORYX_LANG_RESYNC_PATCH"
 LANGUAGE_RGB_MARKER = "ORYX_LANG_RGB_PATCH"
+LANGUAGE_TAP_TERM_MARKER = "ORYX_LANG_TAP_TERM_PATCH"
 TAPHOLD_COMPAT_MARKER = "ORYX_TAPHOLD_FALLBACK_PATCH"
 DOUBLETAP_COMPAT_MARKER = "ORYX_DOUBLETAP_FALLBACK_PATCH"
 SPACESHIFT_HOLD_PREF_MARKER = "ORYX_SPACESHIFT_HOLD_PREF_PATCH"
 SPACE_DOT_TERM_MARKER = "ORYX_SPACE_DOT_TERM_PATCH"
+LANGUAGE_SWITCH_DANCE_INDEX = 1
+LANGUAGE_SWITCH_TAPPING_TERM_MS = 2000
 SPACE_DOT_TERM_SCALE_NUM = 6
 SPACE_DOT_TERM_SCALE_DEN = 5
 # Keep per-key tap windows from collapsing into impractically short ranges.
@@ -444,6 +447,48 @@ def _increase_space_dot_tapping_term(content: str) -> tuple[str, bool]:
     return _replace_function_body(content, "get_tapping_term", tapping_body_new), True
 
 
+def _set_language_switch_tapping_term(content: str) -> tuple[str, bool]:
+    """
+    Set a very long tapping term for the language switch key so tap wins unless
+    the key is intentionally held for around two seconds.
+    """
+    tapping_body, has_tapping = _get_function_body(content, "get_tapping_term")
+    if not has_tapping:
+        return content, False
+
+    if LANGUAGE_TAP_TERM_MARKER in tapping_body:
+        return content, True
+
+    dance_case_pat = re.compile(
+        rf"case\s+TD\s*\(\s*DANCE_{LANGUAGE_SWITCH_DANCE_INDEX}\s*\)\s*:\s*return\s+[^;]+\s*;"
+    )
+    replacement = (
+        f"case TD(DANCE_{LANGUAGE_SWITCH_DANCE_INDEX}): "
+        f"return (uint16_t){LANGUAGE_SWITCH_TAPPING_TERM_MS}; "
+        f"/* {LANGUAGE_TAP_TERM_MARKER} */"
+    )
+    tapping_body_new, replaced = dance_case_pat.subn(replacement, tapping_body, count=1)
+    if replaced > 0:
+        return _replace_function_body(content, "get_tapping_term", tapping_body_new), True
+
+    default_pat = re.compile(r"^(?P<indent>\s*)default\s*:", flags=re.MULTILINE)
+
+    def _insert_before_default(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        return (
+            f"{indent}case TD(DANCE_{LANGUAGE_SWITCH_DANCE_INDEX}): "
+            f"return (uint16_t){LANGUAGE_SWITCH_TAPPING_TERM_MS}; "
+            f"/* {LANGUAGE_TAP_TERM_MARKER} */\n"
+            f"{indent}default:"
+        )
+
+    tapping_body_new, inserted = default_pat.subn(_insert_before_default, tapping_body, count=1)
+    if inserted == 0:
+        return content, False
+
+    return _replace_function_body(content, "get_tapping_term", tapping_body_new), True
+
+
 def _clone_double_tap_to_double_single(body: str) -> tuple[str, bool]:
     if "case DOUBLE_TAP:" not in body:
         return body, False
@@ -622,7 +667,14 @@ def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
     else:
         print("Warning: Could not raise dot+space dance tapping term.")
 
-    # 9) Optionally relax aggressive per-key tapping-term reductions.
+    # 9) Set a long tapping term for the language switch tap-dance key.
+    content, language_term_patched = _set_language_switch_tapping_term(content)
+    if language_term_patched:
+        print(f"Set language switch tapping term to {LANGUAGE_SWITCH_TAPPING_TERM_MS}ms")
+    else:
+        print("Warning: Could not set language switch tapping term.")
+
+    # 10) Optionally relax aggressive per-key tapping-term reductions.
     if RELAX_AGGRESSIVE_TAPPING_TERMS:
         content, tapping_term_changes = _relax_aggressive_tapping_terms(content)
         if tapping_term_changes > 0:
@@ -635,7 +687,7 @@ def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
     else:
         print("Keeping Oryx per-key tapping terms unchanged.")
 
-    # 10) Hook process_record_user
+    # 11) Hook process_record_user
     pattern = r"bool\s+process_record_user\s*\("
     if not re.search(pattern, content):
         print("Error: Could not find process_record_user in keymap.c")
