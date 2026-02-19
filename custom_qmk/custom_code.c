@@ -7,11 +7,16 @@ enum user_custom_keycodes {
     MY_CUSTOM_MACRO = SAFE_RANGE,
 };
 
-static bool language_state_known = false;
 static bool language_is_hebrew = false;
 // DANCE_1 is on matrix [4,0] in this Moonlander layout.
 static const uint8_t LANGUAGE_INDICATOR_ROW = 4;
 static const uint8_t LANGUAGE_INDICATOR_COL = 0;
+static const uint8_t LANGUAGE_ENGLISH_R = 40;
+static const uint8_t LANGUAGE_ENGLISH_G = 140;
+static const uint8_t LANGUAGE_ENGLISH_B = 255;
+static const uint8_t LANGUAGE_HEBREW_R = 255;
+static const uint8_t LANGUAGE_HEBREW_G = 0;
+static const uint8_t LANGUAGE_HEBREW_B = 0;
 
 static uint8_t custom_language_indicator_led(void) {
 #ifdef RGB_MATRIX_ENABLE
@@ -25,16 +30,11 @@ static uint8_t custom_language_indicator_led(void) {
 }
 
 void custom_language_toggled(void) {
-    if (!language_state_known) {
-        language_state_known = true;
-        language_is_hebrew = true;
-        return;
-    }
     language_is_hebrew = !language_is_hebrew;
 }
 
 void custom_language_resync(void) {
-    language_state_known = true;
+    // Force a known baseline: English + default indicator color.
     language_is_hebrew = false;
 }
 
@@ -44,18 +44,14 @@ void custom_language_rgb_indicator(void) {
     uint8_t g = 0;
     uint8_t b = 0;
 
-    if (!language_state_known) {
-        r = 255;
-        g = 140;
-        b = 0;
-    } else if (language_is_hebrew) {
-        r = 255;
-        g = 30;
-        b = 30;
+    if (language_is_hebrew) {
+        r = LANGUAGE_HEBREW_R;
+        g = LANGUAGE_HEBREW_G;
+        b = LANGUAGE_HEBREW_B;
     } else {
-        r = 40;
-        g = 140;
-        b = 255;
+        r = LANGUAGE_ENGLISH_R;
+        g = LANGUAGE_ENGLISH_G;
+        b = LANGUAGE_ENGLISH_B;
     }
 
     uint8_t led = custom_language_indicator_led();

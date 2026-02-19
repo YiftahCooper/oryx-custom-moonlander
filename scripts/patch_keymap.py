@@ -8,6 +8,10 @@ LANGUAGE_RESYNC_MARKER = "ORYX_LANG_RESYNC_PATCH"
 LANGUAGE_RGB_MARKER = "ORYX_LANG_RGB_PATCH"
 TAPHOLD_COMPAT_MARKER = "ORYX_TAPHOLD_FALLBACK_PATCH"
 DOUBLETAP_COMPAT_MARKER = "ORYX_DOUBLETAP_FALLBACK_PATCH"
+SPACESHIFT_HOLD_PREF_MARKER = "ORYX_SPACESHIFT_HOLD_PREF_PATCH"
+SPACE_DOT_TERM_MARKER = "ORYX_SPACE_DOT_TERM_PATCH"
+SPACE_DOT_TERM_SCALE_NUM = 6
+SPACE_DOT_TERM_SCALE_DEN = 5
 # Keep per-key tap windows from collapsing into impractically short ranges.
 MAX_TAPPING_TERM_SUBTRACT = 40
 RELAX_AGGRESSIVE_TAPPING_TERMS = True
@@ -234,6 +238,15 @@ def _patch_language_switch_tap_dance(content: str) -> tuple[str, bool, bool]:
         if resync_n > 0:
             any_resync_patch = True
 
+        finished_body_new, single_hold_resync_n = re.subn(
+            r"case\s+SINGLE_HOLD\s*:\s*register_code16\s*\(\s*KC_LEFT_CTRL\s*\)\s*;\s*break\s*;",
+            f"case SINGLE_HOLD: custom_language_resync(); register_code16(KC_LEFT_CTRL); break; /* {LANGUAGE_RESYNC_MARKER} */",
+            finished_body_new,
+            count=1,
+        )
+        if single_hold_resync_n > 0:
+            any_resync_patch = True
+
         content = _replace_function_body(content, "dance_1_finished", finished_body_new)
 
     on_body, has_on = _get_function_body(content, "on_dance_1")
@@ -335,6 +348,100 @@ def _normalize_tap_dance_hold_resolution(content: str) -> tuple[str, int]:
             content = _replace_function_body(content, reset_name, reset_body_new)
 
     return content, patched_finished
+
+
+def _prefer_hold_for_space_shift_dance(content: str) -> tuple[str, bool]:
+    """
+    For the dance that is SPACE on tap and SHIFT on hold, prefer hold when
+    the key is interrupted by another key (fast chord typing).
+    """
+    for dance_idx in range(0, 24):
+        finished_name = f"dance_{dance_idx}_finished"
+        finished_body, has_finished = _get_function_body(content, finished_name)
+        if not has_finished:
+            continue
+
+        if SPACESHIFT_HOLD_PREF_MARKER in finished_body:
+            return content, True
+
+        if "case SINGLE_TAP: register_code16(KC_SPACE);" not in finished_body:
+            continue
+        if "case SINGLE_HOLD: register_code16(KC_LEFT_SHIFT);" not in finished_body:
+            continue
+
+        step_assign_pat = re.compile(
+            rf"dance_state\s*\[\s*{dance_idx}\s*\]\.step\s*=\s*dance_step\s*\(\s*state\s*\)\s*;"
+        )
+        replacement = (
+            "if (state->count == 1 && state->interrupted) {\n"
+            f"        dance_state[{dance_idx}].step = SINGLE_HOLD; /* {SPACESHIFT_HOLD_PREF_MARKER} */\n"
+            "    } else {\n"
+            f"        dance_state[{dance_idx}].step = dance_step(state);\n"
+            "    }"
+        )
+        finished_body_new, replaced = step_assign_pat.subn(replacement, finished_body, count=1)
+        if replaced == 0:
+            return content, False
+
+        content = _replace_function_body(content, finished_name, finished_body_new)
+        return content, True
+
+    return content, False
+
+
+def _increase_space_dot_tapping_term(content: str) -> tuple[str, bool]:
+    """
+    Increase the dot+space dance tapping term by ~20%.
+    Targets the same dance that was patched from KC_F24 to KP_DOT+SPACE.
+    """
+    target_dance_idx = None
+    for dance_idx in range(0, 24):
+        finished_name = f"dance_{dance_idx}_finished"
+        finished_body, has_finished = _get_function_body(content, finished_name)
+        if has_finished and PATCH_MARKER in finished_body:
+            target_dance_idx = dance_idx
+            break
+
+    if target_dance_idx is None:
+        return content, False
+
+    tapping_body, has_tapping = _get_function_body(content, "get_tapping_term")
+    if not has_tapping:
+        return content, False
+
+    if SPACE_DOT_TERM_MARKER in tapping_body:
+        return content, True
+
+    dance_case_pat = re.compile(
+        rf"case\s+TD\s*\(\s*DANCE_{target_dance_idx}\s*\)\s*:\s*return\s+(?P<expr>[^;]+)\s*;"
+    )
+    case_match = dance_case_pat.search(tapping_body)
+    if case_match:
+        base_expr = case_match.group("expr").strip()
+        replacement = (
+            f"case TD(DANCE_{target_dance_idx}): "
+            f"return (uint16_t)((({base_expr}) * {SPACE_DOT_TERM_SCALE_NUM}) / {SPACE_DOT_TERM_SCALE_DEN}); "
+            f"/* {SPACE_DOT_TERM_MARKER} */"
+        )
+        tapping_body_new = dance_case_pat.sub(replacement, tapping_body, count=1)
+        return _replace_function_body(content, "get_tapping_term", tapping_body_new), True
+
+    default_pat = re.compile(r"^(?P<indent>\s*)default\s*:", flags=re.MULTILINE)
+
+    def _insert_before_default(match: re.Match[str]) -> str:
+        indent = match.group("indent")
+        return (
+            f"{indent}case TD(DANCE_{target_dance_idx}): "
+            f"return (uint16_t)(((TAPPING_TERM) * {SPACE_DOT_TERM_SCALE_NUM}) / {SPACE_DOT_TERM_SCALE_DEN}); "
+            f"/* {SPACE_DOT_TERM_MARKER} */\n"
+            f"{indent}default:"
+        )
+
+    tapping_body_new, inserted = default_pat.subn(_insert_before_default, tapping_body, count=1)
+    if inserted == 0:
+        return content, False
+
+    return _replace_function_body(content, "get_tapping_term", tapping_body_new), True
 
 
 def _clone_double_tap_to_double_single(body: str) -> tuple[str, bool]:
@@ -475,9 +582,9 @@ def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
         print("Warning: Did not patch dance_1 Alt+Shift path; language toggle counter may be incomplete.")
 
     if lang_resync_patched:
-        print("Patched dance_1 double-hold KC_F23 path to custom_language_resync")
+        print("Patched dance_1 resync hooks (double-hold and/or single-hold)")
     else:
-        print("Warning: Did not patch dance_1 KC_F23 double-hold path for resync.")
+        print("Warning: Did not patch dance_1 resync hooks.")
 
     # 4) Patch RGB indicator hook.
     content, rgb_patched = _patch_rgb_indicator_hook(content)
@@ -486,14 +593,21 @@ def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
     else:
         print("Warning: rgb_matrix_indicators_user not found; language RGB indicator hook not applied.")
 
-    # 5) For dances without explicit hold behavior, treat SINGLE_HOLD as SINGLE_TAP.
+    # 5) For the SPACE/SHIFT dance, prefer hold when interrupted by another key.
+    content, spaceshift_hold_pref_patched = _prefer_hold_for_space_shift_dance(content)
+    if spaceshift_hold_pref_patched:
+        print("Patched SPACE/SHIFT dance to prefer hold on interrupt")
+    else:
+        print("Warning: Could not patch SPACE/SHIFT hold-preference behavior.")
+
+    # 6) For dances without explicit hold behavior, treat SINGLE_HOLD as SINGLE_TAP.
     content, hold_fallback_count = _normalize_tap_dance_hold_resolution(content)
     if hold_fallback_count > 0:
         print(f"Added SINGLE_HOLD->SINGLE_TAP fallback to {hold_fallback_count} tap-dance handlers")
     else:
         print("No tap-dance SINGLE_HOLD fallback patching required.")
 
-    # 6) For dances without explicit double-hold behavior, treat DOUBLE_SINGLE_TAP
+    # 7) For dances without explicit double-hold behavior, treat DOUBLE_SINGLE_TAP
     # as DOUBLE_TAP so interrupted doubles still trigger the double function.
     content, doubletap_fallback_count = _normalize_tap_dance_double_tap_resolution(content)
     if doubletap_fallback_count > 0:
@@ -501,7 +615,14 @@ def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
     else:
         print("No tap-dance DOUBLE_SINGLE_TAP fallback patching required.")
 
-    # 7) Optionally relax aggressive per-key tapping-term reductions.
+    # 8) Increase dot+space dance tapping term by ~20%.
+    content, space_dot_term_patched = _increase_space_dot_tapping_term(content)
+    if space_dot_term_patched:
+        print("Raised dot+space dance tapping term by ~20%")
+    else:
+        print("Warning: Could not raise dot+space dance tapping term.")
+
+    # 9) Optionally relax aggressive per-key tapping-term reductions.
     if RELAX_AGGRESSIVE_TAPPING_TERMS:
         content, tapping_term_changes = _relax_aggressive_tapping_terms(content)
         if tapping_term_changes > 0:
@@ -514,7 +635,7 @@ def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
     else:
         print("Keeping Oryx per-key tapping terms unchanged.")
 
-    # 8) Hook process_record_user
+    # 10) Hook process_record_user
     pattern = r"bool\s+process_record_user\s*\("
     if not re.search(pattern, content):
         print("Error: Could not find process_record_user in keymap.c")
