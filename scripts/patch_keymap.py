@@ -237,71 +237,90 @@ def _inject_custom_language_prototypes(content: str) -> tuple[str, bool]:
 
 def _patch_language_switch_tap_dance(content: str) -> tuple[str, bool, bool]:
     """
-    Patch Oryx dance_1 language key behavior:
-      - append custom_language_toggled() to Alt+Shift outputs
-      - replace KC_F23 double-hold branch with custom_language_resync()
+    Enforce language key semantics:
+      - SINGLE_TAP: language toggle
+      - DOUBLE_TAP: language resync
+      - SINGLE_HOLD: Left Ctrl
     """
     any_toggle_patch = False
     any_resync_patch = False
+
+    def _replace_case(body: str, case_name: str, replacement: str) -> tuple[str, bool]:
+        case_pat = re.compile(
+            rf"(?P<indent>^[ \t]*)case\s+{case_name}\s*:\s*.*?(?=^[ \t]*case\s+|^[ \t]*default\s*:|}})",
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        match = case_pat.search(body)
+        if not match:
+            return body, False
+
+        indent = match.group("indent")
+        body_new = case_pat.sub(f"{indent}case {case_name}: {replacement}\n", body, count=1)
+        return body_new, True
 
     language_dance_idx = _find_language_switch_dance_index(content)
     if language_dance_idx is None:
         return content, any_toggle_patch, any_resync_patch
 
     finished_name = f"dance_{language_dance_idx}_finished"
-    on_name = f"on_dance_{language_dance_idx}"
     reset_name = f"dance_{language_dance_idx}_reset"
 
     finished_body, has_finished = _get_function_body(content, finished_name)
     if has_finished:
-        alt_shift_call = r"(?:register_code16|tap_code16)\s*\(\s*LALT\s*\(\s*KC_LEFT_SHIFT\s*\)\s*\)\s*;"
+        finished_body_new = finished_body
 
-        def _append_toggle(match: re.Match[str]) -> str:
-            return f"{match.group(0)} custom_language_toggled(); /* {LANGUAGE_TOGGLE_MARKER} */"
-
-        finished_body_new, toggle_n = re.subn(alt_shift_call, _append_toggle, finished_body)
-        if toggle_n > 0:
+        finished_body_new, single_tap_patched = _replace_case(
+            finished_body_new,
+            "SINGLE_TAP",
+            f"register_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); break; /* {LANGUAGE_TOGGLE_MARKER} */",
+        )
+        if single_tap_patched:
             any_toggle_patch = True
 
-        finished_body_new, resync_n = re.subn(
-            r"case\s+DOUBLE_HOLD\s*:\s*(?:register_code16|tap_code16)\s*\(\s*KC_F23\s*\)\s*;\s*break\s*;",
-            f"case DOUBLE_HOLD: custom_language_resync(); break; /* {LANGUAGE_RESYNC_MARKER} */",
+        finished_body_new, _ = _replace_case(
             finished_body_new,
-            count=1,
+            "SINGLE_HOLD",
+            "register_code16(KC_LEFT_CTRL); break;",
         )
-        if resync_n > 0:
-            any_resync_patch = True
 
-        finished_body_new, single_hold_resync_n = re.subn(
-            r"case\s+SINGLE_HOLD\s*:\s*register_code16\s*\(\s*KC_LEFT_CTRL\s*\)\s*;\s*break\s*;",
-            f"case SINGLE_HOLD: custom_language_resync(); register_code16(KC_LEFT_CTRL); break; /* {LANGUAGE_RESYNC_MARKER} */",
+        finished_body_new, double_tap_patched = _replace_case(
             finished_body_new,
-            count=1,
+            "DOUBLE_TAP",
+            f"custom_language_resync(); break; /* {LANGUAGE_RESYNC_MARKER} */",
         )
-        if single_hold_resync_n > 0:
+        finished_body_new, double_single_patched = _replace_case(
+            finished_body_new,
+            "DOUBLE_SINGLE_TAP",
+            f"custom_language_resync(); break; /* {LANGUAGE_RESYNC_MARKER} */",
+        )
+        finished_body_new, double_hold_patched = _replace_case(
+            finished_body_new,
+            "DOUBLE_HOLD",
+            f"custom_language_resync(); break; /* {LANGUAGE_RESYNC_MARKER} */",
+        )
+        if double_tap_patched or double_single_patched or double_hold_patched:
             any_resync_patch = True
 
         content = _replace_function_body(content, finished_name, finished_body_new)
 
-    on_body, has_on = _get_function_body(content, on_name)
-    if has_on:
-        alt_shift_tap_call = r"tap_code16\s*\(\s*LALT\s*\(\s*KC_LEFT_SHIFT\s*\)\s*\)\s*;"
-
-        def _append_toggle_on(match: re.Match[str]) -> str:
-            return f"{match.group(0)} custom_language_toggled(); /* {LANGUAGE_TOGGLE_MARKER} */"
-
-        on_body_new, on_toggle_n = re.subn(alt_shift_tap_call, _append_toggle_on, on_body)
-        if on_toggle_n > 0:
-            any_toggle_patch = True
-            content = _replace_function_body(content, on_name, on_body_new)
-
     reset_body, has_reset = _get_function_body(content, reset_name)
     if has_reset:
-        reset_body_new, _ = re.subn(
-            r"case\s+DOUBLE_HOLD\s*:\s*unregister_code16\s*\(\s*KC_F23\s*\)\s*;\s*break\s*;",
-            f"case DOUBLE_HOLD: break; /* {LANGUAGE_RESYNC_MARKER} */",
-            reset_body,
-            count=1,
+        reset_body_new = reset_body
+
+        reset_body_new, _ = _replace_case(
+            reset_body_new,
+            "DOUBLE_TAP",
+            f"break; /* {LANGUAGE_RESYNC_MARKER} */",
+        )
+        reset_body_new, _ = _replace_case(
+            reset_body_new,
+            "DOUBLE_SINGLE_TAP",
+            f"break; /* {LANGUAGE_RESYNC_MARKER} */",
+        )
+        reset_body_new, _ = _replace_case(
+            reset_body_new,
+            "DOUBLE_HOLD",
+            f"break; /* {LANGUAGE_RESYNC_MARKER} */",
         )
         content = _replace_function_body(content, reset_name, reset_body_new)
 
@@ -690,17 +709,17 @@ def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
     else:
         print("KC_F24 not present in keymap.c; no FN24 tap-dance replacement needed.")
 
-    # 3) Patch language switch/resync hooks in dance_1 if present.
+    # 3) Patch language switch/resync hooks on the language tap-dance key.
     content, lang_toggle_patched, lang_resync_patched = _patch_language_switch_tap_dance(content)
     if lang_toggle_patched:
-        print("Patched dance_1 Alt+Shift path with custom_language_toggled hooks")
+        print("Patched language key single-tap toggle behavior")
     else:
-        print("Warning: Did not patch dance_1 Alt+Shift path; language toggle counter may be incomplete.")
+        print("Warning: Did not patch language key single-tap toggle behavior.")
 
     if lang_resync_patched:
-        print("Patched dance_1 resync hooks (double-hold and/or single-hold)")
+        print("Patched language key double-tap resync behavior")
     else:
-        print("Warning: Did not patch dance_1 resync hooks.")
+        print("Warning: Did not patch language key resync behavior.")
 
     # 4) Patch RGB indicator hook.
     content, rgb_patched = _patch_rgb_indicator_hook(content)
@@ -731,34 +750,10 @@ def patch_keymap(layout_dir: str, custom_code_path: str) -> None:
     else:
         print("No tap-dance DOUBLE_SINGLE_TAP fallback patching required.")
 
-    # 8) Increase dot+space dance tapping term by ~20%.
-    content, space_dot_term_patched = _increase_space_dot_tapping_term(content)
-    if space_dot_term_patched:
-        print("Raised dot+space dance tapping term by ~20%")
-    else:
-        print("Warning: Could not raise dot+space dance tapping term.")
+    # 8) Keep tapping terms entirely Oryx-managed for now.
+    print("Skipping script-level tapping-term overrides (using Oryx tap terms).")
 
-    # 9) Set a long tapping term for the language switch tap-dance key.
-    content, language_term_patched = _set_language_switch_tapping_term(content)
-    if language_term_patched:
-        print(f"Set language switch tapping term to {LANGUAGE_SWITCH_TAPPING_TERM_MS}ms")
-    else:
-        print("Warning: Could not set language switch tapping term.")
-
-    # 10) Optionally relax aggressive per-key tapping-term reductions.
-    if RELAX_AGGRESSIVE_TAPPING_TERMS:
-        content, tapping_term_changes = _relax_aggressive_tapping_terms(content)
-        if tapping_term_changes > 0:
-            print(
-                f"Relaxed {tapping_term_changes} aggressive per-key tapping-term reductions "
-                f"(max subtract: {MAX_TAPPING_TERM_SUBTRACT})"
-            )
-        else:
-            print("No aggressive per-key tapping-term reductions required patching.")
-    else:
-        print("Keeping Oryx per-key tapping terms unchanged.")
-
-    # 11) Hook process_record_user
+    # 9) Hook process_record_user
     pattern = r"bool\s+process_record_user\s*\("
     if not re.search(pattern, content):
         print("Error: Could not find process_record_user in keymap.c")
