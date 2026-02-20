@@ -1,5 +1,12 @@
 #include QMK_KEYBOARD_H
 #include "version.h"
+
+// --- Custom language hooks (injected) ---
+void custom_language_toggled(void);
+void custom_language_toggle(void);
+void custom_language_resync(void);
+void custom_language_rgb_indicator(void);
+// ----------------------------------------
 #define MOON_LED_LEVEL LED_LEVEL
 #ifndef ZSA_SAFE_RANGE
 #define ZSA_SAFE_RANGE SAFE_RANGE
@@ -37,12 +44,11 @@ enum tap_dance_codes {
   DANCE_2,
 };
 
-#define DUAL_FUNC_0 LT(1, KC_O)
-#define DUAL_FUNC_1 LT(11, KC_S)
-#define DUAL_FUNC_2 LT(11, KC_F)
-#define DUAL_FUNC_3 LT(9, KC_F13)
-#define DUAL_FUNC_4 LT(6, KC_F14)
-#define DUAL_FUNC_5 LT(2, KC_F19)
+#define DUAL_FUNC_0 LT(6, KC_D)
+#define DUAL_FUNC_1 LT(6, KC_F12)
+#define DUAL_FUNC_2 LT(11, KC_9)
+#define DUAL_FUNC_3 LT(8, KC_F5)
+#define DUAL_FUNC_4 LT(1, KC_F24)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_moonlander(
@@ -50,7 +56,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     DUAL_FUNC_0,    KC_Q,           KC_W,           KC_E,           KC_R,           KC_T,           KC_MINUS,                                       ALL_T(KC_PGDN), KC_Y,           KC_U,           KC_I,           KC_O,           KC_P,           KC_END,         
     DUAL_FUNC_1,    KC_A,           KC_S,           KC_D,           KC_F,           KC_G,           KC_GRAVE,                                                                       TG(1),          KC_H,           KC_J,           KC_K,           KC_L,           KC_SCLN,        KC_BSLS,        
     KC_LEFT_SHIFT,  KC_Z,           KC_X,           KC_C,           KC_V,           KC_B,                                           KC_N,           KC_M,           KC_COMMA,       KC_DOT,         KC_UP,          OSL(1),         
-    DUAL_FUNC_2,    KC_LEFT_GUI,    KC_LEFT_ALT,    KC_LBRC,        KC_RBRC,        MT(MOD_RALT, KC_TAB),                                                                                                DUAL_FUNC_3,    KC_QUOTE,       KC_SLASH,       KC_LEFT,        KC_DOWN,        KC_RIGHT,       
+    MT(MOD_LCTL, KC_F18),KC_LEFT_GUI,    KC_LEFT_ALT,    KC_LBRC,        KC_RBRC,        MT(MOD_RALT, KC_TAB),                                                                                                DUAL_FUNC_2,    KC_QUOTE,       KC_SLASH,       KC_LEFT,        KC_DOWN,        KC_RIGHT,       
     TD(DANCE_0),    MT(MOD_RCTL, KC_PSCR),LCTL(KC_LEFT_SHIFT),                KC_DELETE,      KC_BSPC,        TD(DANCE_1)
   ),
   [1] = LAYOUT_moonlander(
@@ -64,7 +70,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [2] = LAYOUT_moonlander(
     HSV_0_0_0,      HSV_0_137_115,  TOGGLE_LAYER_COLOR,RGB_TOG,        TG(3),          HSV_0_0_0,      QK_BOOT,                                        KC_TRANSPARENT, ST_MACRO_12,    ST_MACRO_13,    ST_MACRO_14,    ST_MACRO_15,    ST_MACRO_16,    ST_MACRO_17,    
     KC_TAB,         ST_MACRO_1,     LCTL(KC_BSPC),  LCTL(KC_DELETE),ST_MACRO_2,     ST_MACRO_3,     ST_MACRO_4,                                     KC_TRANSPARENT, KC_KP_COMMA,    KC_COMMA,       KC_DOT,         KC_KP_DOT,      KC_INTERNATIONAL_1,KC_TRANSPARENT, 
-    KC_TRANSPARENT, KC_LEFT_CTRL,   KC_LEFT_ALT,    KC_LEFT_GUI,    KC_LEFT_SHIFT,  LCTL(KC_K),     KC_TRANSPARENT,                                                                 KC_TRANSPARENT, DUAL_FUNC_4,    RCTL(KC_LEFT),  KC_END,         RCTL(KC_RIGHT), DUAL_FUNC_5,    KC_TRANSPARENT, 
+    KC_TRANSPARENT, KC_LEFT_CTRL,   KC_LEFT_ALT,    KC_LEFT_GUI,    KC_LEFT_SHIFT,  LCTL(KC_K),     KC_TRANSPARENT,                                                                 KC_TRANSPARENT, DUAL_FUNC_3,    RCTL(KC_LEFT),  KC_END,         RCTL(KC_RIGHT), DUAL_FUNC_4,    KC_TRANSPARENT, 
     ST_MACRO_5,     ST_MACRO_6,     ST_MACRO_7,     ST_MACRO_8,     ST_MACRO_9,     ST_MACRO_10,                                    MT(MOD_LCTL, KC_R),TD(DANCE_2),    KC_LEFT,        KC_RIGHT,       LCTL(LSFT(KC_MINUS)),KC_TRANSPARENT, 
     RGB_HUI,        RGB_HUD,        KC_TRANSPARENT, ST_MACRO_11,    LALT(KC_LEFT_SHIFT),KC_UP,                                                                                                          RGB_SAI,        KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
     KC_LEFT,        KC_DOWN,        KC_RIGHT,                       RGB_VAD,        RGB_VAI,        RGB_SAD
@@ -184,6 +190,7 @@ bool rgb_matrix_indicators_user(void) {
     RGB rgb = hsv_to_rgb_with_value((HSV) { 0, 252, 242 });
     rgb_matrix_set_color( 32, rgb.r, rgb.g, rgb.b );
   } 
+  custom_language_rgb_indicator(); /* ORYX_LANG_RGB_PATCH */
   return true;
 }
 
@@ -464,21 +471,6 @@ bool process_record_user_oryx(uint16_t keycode, keyrecord_t *record) {
     case DUAL_FUNC_2:
       if (record->tap.count > 0) {
         if (record->event.pressed) {
-          register_code16(LALT(KC_LEFT_SHIFT));
-        } else {
-          unregister_code16(LALT(KC_LEFT_SHIFT));
-        }
-      } else {
-        if (record->event.pressed) {
-          register_code16(KC_LEFT_CTRL);
-        } else {
-          unregister_code16(KC_LEFT_CTRL);
-        }  
-      }  
-      return false;
-    case DUAL_FUNC_3:
-      if (record->tap.count > 0) {
-        if (record->event.pressed) {
           register_code16(KC_ENTER);
         } else {
           unregister_code16(KC_ENTER);
@@ -491,7 +483,7 @@ bool process_record_user_oryx(uint16_t keycode, keyrecord_t *record) {
         }  
       }  
       return false;
-    case DUAL_FUNC_4:
+    case DUAL_FUNC_3:
       if (record->tap.count > 0) {
         if (record->event.pressed) {
           register_code16(LCTL(KC_A));
@@ -506,7 +498,7 @@ bool process_record_user_oryx(uint16_t keycode, keyrecord_t *record) {
         }  
       }  
       return false;
-    case DUAL_FUNC_5:
+    case DUAL_FUNC_4:
       if (record->tap.count > 0) {
         if (record->event.pressed) {
           register_code16(LCTL(KC_E));

@@ -2,6 +2,9 @@
 #define ORYX_CUSTOM_MOONLANDER_CUSTOM_CODE_C
 
 #include "quantum.h"
+#ifdef RAW_ENABLE
+#include "raw_hid.h"
+#endif
 
 enum user_custom_keycodes {
     MY_CUSTOM_MACRO = SAFE_RANGE,
@@ -18,6 +21,12 @@ static const uint8_t LANGUAGE_HEBREW_R = 255;
 static const uint8_t LANGUAGE_HEBREW_G = 0;
 static const uint8_t LANGUAGE_HEBREW_B = 0;
 static const uint16_t LANGUAGE_TOGGLE_GUARD_MS = 250;
+#ifdef RAW_ENABLE
+static const uint8_t LANGUAGE_SYNC_CMD_SET_STATE = 0xA0;
+static const uint8_t LANGUAGE_SYNC_STATE_ENGLISH = 0x00;
+static const uint8_t LANGUAGE_SYNC_STATE_HEBREW = 0x01;
+static const uint8_t LANGUAGE_SYNC_MAGIC = 0x4C;  // 'L'
+#endif
 
 // Suppress duplicate language flips caused by accidental re-triggering/bounce.
 static bool language_toggle_guard_armed = false;
@@ -65,6 +74,27 @@ void custom_language_resync(void) {
     // Force a known baseline: English + default indicator color.
     language_is_hebrew = false;
 }
+
+#ifdef RAW_ENABLE
+// Optional OS bridge protocol over RAW HID:
+// data[0] = 0xA0 (set language state)
+// data[1] = 0 (English) or 1 (Hebrew)
+// data[2] = 0x4C ('L') guard byte
+void raw_hid_receive_oryx(uint8_t *data, uint8_t length) {
+    if (length < 3) {
+        return;
+    }
+    if (data[0] != LANGUAGE_SYNC_CMD_SET_STATE || data[2] != LANGUAGE_SYNC_MAGIC) {
+        return;
+    }
+
+    if (data[1] == LANGUAGE_SYNC_STATE_HEBREW) {
+        language_is_hebrew = true;
+    } else if (data[1] == LANGUAGE_SYNC_STATE_ENGLISH) {
+        language_is_hebrew = false;
+    }
+}
+#endif
 
 void custom_language_rgb_indicator(void) {
 #ifdef RGB_MATRIX_ENABLE
