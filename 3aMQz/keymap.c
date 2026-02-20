@@ -3,6 +3,7 @@
 
 // --- Custom language hooks (injected) ---
 void custom_language_toggled(void);
+void custom_language_toggle(void);
 void custom_language_resync(void);
 void custom_language_rgb_indicator(void);
 // ----------------------------------------
@@ -44,11 +45,11 @@ enum tap_dance_codes {
   DANCE_3,
 };
 
-#define DUAL_FUNC_0 LT(9, KC_F15)
-#define DUAL_FUNC_1 LT(5, KC_F10)
-#define DUAL_FUNC_2 LT(4, KC_F15)
-#define DUAL_FUNC_3 LT(3, KC_C)
-#define DUAL_FUNC_4 LT(2, KC_N)
+#define DUAL_FUNC_0 LT(5, KC_F16)
+#define DUAL_FUNC_1 LT(10, KC_F21)
+#define DUAL_FUNC_2 LT(1, KC_F2)
+#define DUAL_FUNC_3 LT(2, KC_9)
+#define DUAL_FUNC_4 LT(1, KC_L)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_moonlander(
@@ -72,8 +73,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TAB,         ST_MACRO_1,     LCTL(KC_BSPC),  LCTL(KC_DELETE),ST_MACRO_2,     ST_MACRO_3,     ST_MACRO_4,                                     KC_TRANSPARENT, KC_KP_COMMA,    KC_COMMA,       KC_DOT,         KC_KP_DOT,      KC_INTERNATIONAL_1,KC_TRANSPARENT, 
     KC_TRANSPARENT, KC_LEFT_CTRL,   KC_LEFT_ALT,    KC_LEFT_GUI,    KC_LEFT_SHIFT,  LCTL(KC_K),     KC_TRANSPARENT,                                                                 KC_TRANSPARENT, DUAL_FUNC_3,    RCTL(KC_LEFT),  KC_END,         RCTL(KC_RIGHT), DUAL_FUNC_4,    KC_TRANSPARENT, 
     ST_MACRO_5,     ST_MACRO_6,     ST_MACRO_7,     ST_MACRO_8,     ST_MACRO_9,     ST_MACRO_10,                                    MT(MOD_LCTL, KC_R),TD(DANCE_3),    KC_LEFT,        KC_RIGHT,       LCTL(LSFT(KC_MINUS)),KC_TRANSPARENT, 
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, ST_MACRO_11,    LALT(KC_LEFT_SHIFT),KC_UP,                                                                                                          KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
-    KC_LEFT,        KC_DOWN,        KC_RIGHT,                       KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT
+    RGB_HUI,        RGB_HUD,        KC_TRANSPARENT, ST_MACRO_11,    LALT(KC_LEFT_SHIFT),KC_UP,                                                                                                          RGB_SAI,        KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
+    KC_LEFT,        KC_DOWN,        KC_RIGHT,                       RGB_VAD,        RGB_VAI,        RGB_SAD
   ),
   [3] = LAYOUT_moonlander(
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
@@ -130,7 +131,7 @@ const uint8_t PROGMEM ledmap[][RGB_MATRIX_LED_COUNT][3] = {
 
     [1] = { {22,251,241}, {22,251,241}, {22,251,241}, {185,244,212}, {185,244,212}, {137,252,242}, {137,252,242}, {154,255,255}, {154,255,255}, {185,244,212}, {137,252,242}, {137,252,242}, {154,255,255}, {154,255,255}, {185,244,212}, {137,252,242}, {137,252,242}, {154,255,255}, {154,255,255}, {154,255,255}, {137,252,242}, {137,252,242}, {154,255,255}, {154,255,255}, {154,255,255}, {137,252,242}, {137,252,242}, {154,255,255}, {154,255,255}, {137,252,242}, {137,252,242}, {239,255,255}, {185,244,212}, {185,244,212}, {185,244,212}, {185,244,212}, {154,255,255}, {154,255,255}, {154,255,255}, {154,255,255}, {22,251,241}, {110,252,242}, {110,252,242}, {110,252,242}, {22,251,241}, {22,251,241}, {191,255,255}, {191,255,255}, {191,255,255}, {110,252,242}, {22,251,241}, {191,255,255}, {191,255,255}, {191,255,255}, {191,255,255}, {154,255,255}, {191,255,255}, {191,255,255}, {191,255,255}, {110,252,242}, {154,255,255}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {239,255,255}, {22,251,241}, {22,251,241}, {22,251,241}, {22,251,241} },
 
-    [2] = { {239,255,255}, {0,192,254}, {154,255,255}, {10,225,255}, {85,203,158}, {239,255,255}, {10,225,255}, {0,192,254}, {10,225,255}, {85,203,158}, {239,255,255}, {10,225,255}, {0,192,254}, {10,225,255}, {85,203,158}, {239,255,255}, {10,225,255}, {85,203,158}, {154,255,255}, {10,225,255}, {239,255,255}, {10,225,255}, {85,203,158}, {10,225,255}, {137,252,242}, {22,251,241}, {10,225,255}, {10,225,255}, {10,225,255}, {45,255,255}, {0,192,254}, {239,255,255}, {198,215,255}, {198,215,255}, {198,215,255}, {198,215,255}, {0,192,254}, {0,192,254}, {0,0,255}, {0,192,254}, {0,192,254}, {0,192,254}, {0,0,255}, {10,225,255}, {10,225,255}, {0,192,254}, {0,192,254}, {10,225,255}, {10,225,255}, {0,0,255}, {0,192,254}, {0,192,254}, {10,225,255}, {10,225,255}, {0,0,255}, {0,192,254}, {0,192,254}, {0,192,254}, {10,225,255}, {10,225,255}, {154,255,255}, {0,192,254}, {10,225,255}, {10,225,255}, {10,225,255}, {0,192,254}, {0,192,254}, {0,192,254}, {154,255,255}, {85,203,158}, {85,203,158}, {85,203,158} },
+    [2] = { {239,255,255}, {0,192,254}, {154,255,255}, {10,225,255}, {83,233,240}, {239,255,255}, {10,225,255}, {0,192,254}, {10,225,255}, {0,195,255}, {239,255,255}, {10,225,255}, {0,192,254}, {10,225,255}, {85,203,158}, {239,255,255}, {10,225,255}, {85,203,158}, {154,255,255}, {10,225,255}, {239,255,255}, {10,225,255}, {85,203,158}, {10,225,255}, {137,252,242}, {22,251,241}, {10,225,255}, {10,225,255}, {10,225,255}, {45,255,255}, {0,192,254}, {239,255,255}, {198,215,255}, {198,215,255}, {198,215,255}, {198,215,255}, {0,192,254}, {0,192,254}, {0,0,255}, {0,192,254}, {0,192,254}, {0,192,254}, {0,0,255}, {10,225,255}, {10,225,255}, {0,192,254}, {0,192,254}, {10,225,255}, {10,225,255}, {0,0,255}, {0,192,254}, {0,192,254}, {10,225,255}, {10,225,255}, {0,0,255}, {0,192,254}, {0,192,254}, {0,192,254}, {10,225,255}, {10,225,255}, {154,255,255}, {0,192,254}, {10,225,255}, {10,225,255}, {10,225,255}, {0,192,254}, {0,192,254}, {0,192,254}, {0,190,255}, {83,233,240}, {0,190,255}, {83,233,240} },
 
     [3] = { {22,251,241}, {22,251,241}, {22,251,241}, {185,244,212}, {185,244,212}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {185,244,212}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {185,244,212}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {137,252,242}, {185,244,212}, {185,244,212}, {185,244,212}, {185,244,212}, {22,251,241}, {22,251,241}, {185,244,212}, {185,244,212}, {22,251,241}, {110,252,242}, {110,252,242}, {110,252,242}, {22,251,241}, {22,251,241}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {22,251,241}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {110,252,242}, {22,251,241}, {22,251,241}, {239,255,255}, {22,251,241}, {22,251,241}, {22,251,241}, {22,251,241} },
 
@@ -232,14 +233,9 @@ void dance_0_finished(tap_dance_state_t *state, void *user_data);
 void dance_0_reset(tap_dance_state_t *state, void *user_data);
 
 void on_dance_0(tap_dance_state_t *state, void *user_data) {
-    if(state->count == 3) {
-        tap_code16(LALT(KC_LEFT_SHIFT));
-        tap_code16(LALT(KC_LEFT_SHIFT));
-        tap_code16(LALT(KC_LEFT_SHIFT));
-    }
-    if(state->count > 3) {
-        tap_code16(LALT(KC_LEFT_SHIFT));
-    }
+    // Disable generated multi-tap side effects on language key.
+    (void)state;
+    (void)user_data; /* ORYX_LANG_ON_DANCE_NOOP_PATCH */
 }
 
 void dance_0_finished(tap_dance_state_t *state, void *user_data) {
@@ -249,7 +245,7 @@ void dance_0_finished(tap_dance_state_t *state, void *user_data) {
         dance_state[0].step = dance_step(state);
     }
     switch (dance_state[0].step) {
-        case SINGLE_TAP: tap_code16(LALT(KC_LEFT_SHIFT)); custom_language_toggled(); break; /* ORYX_LANG_TOGGLE_PATCH */
+        case SINGLE_TAP: custom_language_toggle(); break; /* ORYX_LANG_TOGGLE_PATCH */
         case SINGLE_HOLD: register_code16(KC_LEFT_CTRL); break;
         case DOUBLE_TAP: custom_language_resync(); break; /* ORYX_LANG_RESYNC_PATCH */
         case DOUBLE_HOLD: custom_language_resync(); break; /* ORYX_LANG_RESYNC_PATCH */

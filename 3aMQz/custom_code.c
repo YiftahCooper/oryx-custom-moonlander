@@ -17,6 +17,20 @@ static const uint8_t LANGUAGE_ENGLISH_B = 255;
 static const uint8_t LANGUAGE_HEBREW_R = 255;
 static const uint8_t LANGUAGE_HEBREW_G = 0;
 static const uint8_t LANGUAGE_HEBREW_B = 0;
+static const uint16_t LANGUAGE_TOGGLE_GUARD_MS = 90;
+
+// Suppress duplicate language flips caused by accidental re-triggering/bounce.
+static bool language_toggle_guard_armed = false;
+static uint16_t language_toggle_timer = 0;
+
+static bool language_toggle_guard_allows_action(void) {
+    if (language_toggle_guard_armed && timer_elapsed(language_toggle_timer) < LANGUAGE_TOGGLE_GUARD_MS) {
+        return false;
+    }
+    language_toggle_timer = timer_read();
+    language_toggle_guard_armed = true;
+    return true;
+}
 
 static uint8_t custom_language_indicator_led(void) {
 #ifdef RGB_MATRIX_ENABLE
@@ -30,11 +44,24 @@ static uint8_t custom_language_indicator_led(void) {
 }
 
 void custom_language_toggled(void) {
+    if (!language_toggle_guard_allows_action()) {
+        return;
+    }
+    language_is_hebrew = !language_is_hebrew;
+}
+
+void custom_language_toggle(void) {
+    if (!language_toggle_guard_allows_action()) {
+        return;
+    }
+    tap_code16(LALT(KC_LEFT_SHIFT));
     language_is_hebrew = !language_is_hebrew;
 }
 
 void custom_language_resync(void) {
     // Force a known baseline: English + default indicator color.
+    language_toggle_timer = timer_read();
+    language_toggle_guard_armed = true;
     language_is_hebrew = false;
 }
 
