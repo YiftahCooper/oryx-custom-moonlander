@@ -21,12 +21,6 @@ static const uint8_t LANGUAGE_HEBREW_R = 255;
 static const uint8_t LANGUAGE_HEBREW_G = 0;
 static const uint8_t LANGUAGE_HEBREW_B = 0;
 static const uint16_t LANGUAGE_TOGGLE_GUARD_MS = 250;
-#ifdef RAW_ENABLE
-static const uint8_t LANGUAGE_SYNC_CMD_SET_STATE = 0xA0;
-static const uint8_t LANGUAGE_SYNC_STATE_ENGLISH = 0x00;
-static const uint8_t LANGUAGE_SYNC_STATE_HEBREW = 0x01;
-static const uint8_t LANGUAGE_SYNC_MAGIC = 0x4C;  // 'L'
-#endif
 
 // Suppress duplicate language flips caused by accidental re-triggering/bounce.
 static bool language_toggle_guard_armed = false;
@@ -75,34 +69,20 @@ void custom_language_resync(void) {
     language_is_hebrew = false;
 }
 
-#ifdef RAW_ENABLE
-// Optional OS bridge protocol over RAW HID:
-// data[0] = 0xA0 (set language state)
-// data[1] = 0 (English) or 1 (Hebrew)
-// data[2] = 0x4C ('L') guard byte
-void raw_hid_receive_oryx(uint8_t *data, uint8_t length) {
-    if (length < 3) {
-        return;
-    }
-    if (data[0] != LANGUAGE_SYNC_CMD_SET_STATE || data[2] != LANGUAGE_SYNC_MAGIC) {
-        return;
-    }
-
-    if (data[1] == LANGUAGE_SYNC_STATE_HEBREW) {
-        language_is_hebrew = true;
-    } else if (data[1] == LANGUAGE_SYNC_STATE_ENGLISH) {
-        language_is_hebrew = false;
-    }
-}
-#endif
-
 void custom_language_rgb_indicator(void) {
 #ifdef RGB_MATRIX_ENABLE
     uint8_t r = 0;
     uint8_t g = 0;
     uint8_t b = 0;
+    bool is_hebrew = language_is_hebrew;
 
-    if (language_is_hebrew) {
+#ifdef RAW_ENABLE
+    // Oryx owns raw_hid_receive(), so host sync piggybacks on ORYX_STATUS_LED_CONTROL.
+    // The host bridge updates rawhid_state.status_led_control to 0 (EN) / 1 (HE).
+    is_hebrew = rawhid_state.status_led_control;
+#endif
+
+    if (is_hebrew) {
         r = LANGUAGE_HEBREW_R;
         g = LANGUAGE_HEBREW_G;
         b = LANGUAGE_HEBREW_B;

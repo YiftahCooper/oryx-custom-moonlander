@@ -2,7 +2,7 @@
 // @id              moonlander-language-sync
 // @name            Moonlander Language Sync
 // @description     Maps F18 to language switching and syncs EN/HE state to QMK RGB via RAW HID.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Yiftah + Codex
 // @include         explorer.exe
 // @compilerOptions -lsetupapi -lhid
@@ -15,10 +15,10 @@
 //    - English -> 0
 //    - Hebrew  -> 1
 //
-// Firmware side expected protocol:
-// data[0] = 0xA0
-// data[1] = language state (0 English, 1 Hebrew)
-// data[2] = 0x4C ('L' guard byte)
+// Transport:
+// Uses Oryx's ORYX_STATUS_LED_CONTROL command (0x0A), where param[0]
+// carries the language state (0 English, 1 Hebrew). Firmware reads the
+// mirrored bool via rawhid_state.status_led_control.
 //
 // Recommended keyboard mapping:
 // - Tap: KC_F18
@@ -60,10 +60,10 @@ namespace {
 constexpr UINT kHotkeyId = 0xA701;
 constexpr uint16_t kRawHidUsagePage = 0xFF60;
 constexpr uint16_t kRawHidUsage = 0x0061;
-constexpr uint8_t kLanguageSyncCommand = 0xA0;
+constexpr uint8_t kOryxStatusLedControlCommand = 0x0A;
 constexpr uint8_t kLanguageSyncEnglish = 0x00;
 constexpr uint8_t kLanguageSyncHebrew = 0x01;
-constexpr uint8_t kLanguageSyncMagic = 0x4C;  // 'L'
+constexpr DWORD kRetryWhenNotSentMs = 5000;
 
 enum ShortcutMode : int {
     ShortcutNone = 0,
@@ -219,9 +219,8 @@ bool send_language_report_to_device(HANDLE device_handle, bool is_hebrew) {
 
     std::vector<uint8_t> report(report_len, 0);
     report[0] = 0x00;  // Report ID
-    report[1] = kLanguageSyncCommand;
+    report[1] = kOryxStatusLedControlCommand;
     report[2] = is_hebrew ? kLanguageSyncHebrew : kLanguageSyncEnglish;
-    report[3] = kLanguageSyncMagic;
 
     DWORD written = 0;
     BOOL write_ok = WriteFile(
@@ -334,6 +333,8 @@ DWORD WINAPI worker_thread_proc(void *) {
 
     bool have_last_state = false;
     bool last_is_hebrew = false;
+    bool last_send_succeeded = false;
+    DWORD next_unsent_retry_tick = 0;
     DWORD last_poll_tick = 0;
 
     while (WaitForSingleObject(g_stop_event, 0) == WAIT_TIMEOUT) {
@@ -341,6 +342,8 @@ DWORD WINAPI worker_thread_proc(void *) {
             if (msg.message == WM_HOTKEY && msg.wParam == kHotkeyId) {
                 trigger_language_shortcut();
                 have_last_state = false;  // force immediate state refresh
+                last_send_succeeded = false;
+                next_unsent_retry_tick = 0;
                 last_poll_tick = 0;
             }
         }
@@ -351,16 +354,22 @@ DWORD WINAPI worker_thread_proc(void *) {
 
             bool is_hebrew = false;
             if (get_active_language_is_hebrew(&is_hebrew)) {
-                if (!have_last_state || is_hebrew != last_is_hebrew) {
+                bool state_changed = !have_last_state || is_hebrew != last_is_hebrew;
+                bool should_retry_unsent = !state_changed && !last_send_succeeded &&
+                                           (next_unsent_retry_tick == 0 || now >= next_unsent_retry_tick);
+                if (state_changed || should_retry_unsent) {
                     bool sent = send_language_state_to_keyboards(is_hebrew);
-                    if (sent) {
-                        last_is_hebrew = is_hebrew;
-                        have_last_state = true;
-                        if (g_settings.debug_logging) {
+                    last_is_hebrew = is_hebrew;
+                    have_last_state = true;
+                    last_send_succeeded = sent;
+                    next_unsent_retry_tick = sent ? 0 : (now + kRetryWhenNotSentMs);
+
+                    if (g_settings.debug_logging) {
+                        if (sent) {
                             Wh_Log(L"Language sync sent: %ls", is_hebrew ? L"Hebrew" : L"English");
+                        } else {
+                            Wh_Log(L"Language sync not sent; retry scheduled in %lu ms", kRetryWhenNotSentMs);
                         }
-                    } else if (g_settings.debug_logging) {
-                        Wh_Log(L"Language sync not sent (no matching keyboard RAW HID endpoint found)");
                     }
                 }
             }

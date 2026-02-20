@@ -63,10 +63,9 @@ This setup makes the keyboard RGB language indicator follow the actual Windows i
 
 ## Protocol Reference
 
-Windhawk sends RAW HID report payload:
+Windhawk sends an Oryx-native RAW HID command:
 
-- `data[0] = 0xA0` (custom command id)
-- `data[1] = 0x00` English, `0x01` Hebrew
-- `data[2] = 0x4C` (`'L'`) guard byte
+- Command: `ORYX_STATUS_LED_CONTROL` (`0x0A`)
+- Payload: `param[0] = 0x00` English, `0x01` Hebrew
 
-Firmware handler is in `custom_qmk/custom_code.c` (`raw_hid_receive_oryx`).
+Firmware reads mirrored state from `rawhid_state.status_led_control` in `custom_qmk/custom_code.c`.
