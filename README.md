@@ -21,6 +21,8 @@ Instead of maintaining a modified `keymap.c` and fighting git merge conflicts ev
     *   Run on branch **`main`**.
 3.  **Download Firmware**:
     *   Get the `.bin` file from the run artifacts.
+4.  **Optional: Windows Language Sync (Windhawk)**:
+    *   Follow `docs/windhawk-language-sync.md` to sync OS language state to keyboard RGB.
 
 ## File Structure
 

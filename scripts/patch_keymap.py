@@ -763,10 +763,11 @@ def patch_keymap(layout_dir: str) -> None:
     dance_indices = _discover_dance_indices(content)
     print(f"Discovered tap-dance indices: {dance_indices}")
 
-    # 1) Temporary A/B mode: keep language behavior fully Oryx-managed.
-    # Set to True to re-enable all language injection passes below.
+    # 1) Keep key semantics Oryx-managed, but allow RGB hook injection so
+    # custom language indicator state can be driven from host RAW HID updates.
     enable_language_injection = False
-    if enable_language_injection:
+    enable_language_rgb_hook_injection = True
+    if enable_language_injection or enable_language_rgb_hook_injection:
         # Add forward declarations for custom language hooks.
         content, _ = _inject_custom_language_prototypes(content)
     else:
@@ -781,7 +782,7 @@ def patch_keymap(layout_dir: str) -> None:
     else:
         print("KC_F24 not present in keymap.c; no FN24 tap-dance replacement needed.")
 
-    # 3) Optional language switch/resync + RGB indicator injection.
+    # 3) Optional language switch/resync injection.
     if enable_language_injection:
         content, lang_toggle_patched, lang_resync_patched = _patch_language_switch_tap_dance(content, dance_indices)
         if lang_toggle_patched:
@@ -794,14 +795,17 @@ def patch_keymap(layout_dir: str) -> None:
         else:
             print("Warning: Did not patch language key resync behavior.")
 
-        # 4) Patch RGB indicator hook.
+    else:
+        print("Skipping language tap-dance patching (Oryx-managed language behavior).")
+
+    # 4) Optional RGB indicator hook injection.
+    if enable_language_rgb_hook_injection:
         content, rgb_patched = _patch_rgb_indicator_hook(content)
         if rgb_patched:
             print("Patched rgb_matrix_indicators_user with custom language indicator hook")
         else:
             print("Warning: rgb_matrix_indicators_user not found; language RGB indicator hook not applied.")
     else:
-        print("Skipping language tap-dance patching (Oryx-managed language behavior).")
         print("Skipping language RGB indicator hook patching (Oryx-managed language behavior).")
 
     # 5) For the SPACE/SHIFT dance, prefer hold when interrupted by another key.
