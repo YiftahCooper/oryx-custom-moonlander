@@ -763,8 +763,14 @@ def patch_keymap(layout_dir: str) -> None:
     dance_indices = _discover_dance_indices(content)
     print(f"Discovered tap-dance indices: {dance_indices}")
 
-    # 1) Add forward declarations for custom language hooks.
-    content, _ = _inject_custom_language_prototypes(content)
+    # 1) Temporary A/B mode: keep language behavior fully Oryx-managed.
+    # Set to True to re-enable all language injection passes below.
+    enable_language_injection = False
+    if enable_language_injection:
+        # Add forward declarations for custom language hooks.
+        content, _ = _inject_custom_language_prototypes(content)
+    else:
+        print("Skipping language prototype injection (Oryx-managed language behavior).")
 
     # 2) Replace FN24 behavior only in the corresponding tap-dance function.
     content, replaced = _replace_fn24_in_space_tap_dance(content, dance_indices)
@@ -775,24 +781,28 @@ def patch_keymap(layout_dir: str) -> None:
     else:
         print("KC_F24 not present in keymap.c; no FN24 tap-dance replacement needed.")
 
-    # 3) Patch language switch/resync hooks on the language tap-dance key.
-    content, lang_toggle_patched, lang_resync_patched = _patch_language_switch_tap_dance(content, dance_indices)
-    if lang_toggle_patched:
-        print("Patched language key single-tap toggle behavior")
-    else:
-        print("Warning: Did not patch language key single-tap toggle behavior.")
+    # 3) Optional language switch/resync + RGB indicator injection.
+    if enable_language_injection:
+        content, lang_toggle_patched, lang_resync_patched = _patch_language_switch_tap_dance(content, dance_indices)
+        if lang_toggle_patched:
+            print("Patched language key single-tap toggle behavior")
+        else:
+            print("Warning: Did not patch language key single-tap toggle behavior.")
 
-    if lang_resync_patched:
-        print("Patched language key double-tap resync behavior")
-    else:
-        print("Warning: Did not patch language key resync behavior.")
+        if lang_resync_patched:
+            print("Patched language key double-tap resync behavior")
+        else:
+            print("Warning: Did not patch language key resync behavior.")
 
-    # 4) Patch RGB indicator hook.
-    content, rgb_patched = _patch_rgb_indicator_hook(content)
-    if rgb_patched:
-        print("Patched rgb_matrix_indicators_user with custom language indicator hook")
+        # 4) Patch RGB indicator hook.
+        content, rgb_patched = _patch_rgb_indicator_hook(content)
+        if rgb_patched:
+            print("Patched rgb_matrix_indicators_user with custom language indicator hook")
+        else:
+            print("Warning: rgb_matrix_indicators_user not found; language RGB indicator hook not applied.")
     else:
-        print("Warning: rgb_matrix_indicators_user not found; language RGB indicator hook not applied.")
+        print("Skipping language tap-dance patching (Oryx-managed language behavior).")
+        print("Skipping language RGB indicator hook patching (Oryx-managed language behavior).")
 
     # 5) For the SPACE/SHIFT dance, prefer hold when interrupted by another key.
     content, spaceshift_hold_pref_patched = _prefer_hold_for_space_shift_dance(content, dance_indices)
