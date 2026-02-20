@@ -4,7 +4,8 @@
 #define NO_AUTO_SHIFT_TAB
 #define NO_AUTO_SHIFT_ALPHA
 #define CAPS_LOCK_STATUS
-#define SERIAL_NUMBER "3aMQz/yo45bd"
+#define HOLD_ON_OTHER_KEY_PRESS
+#define SERIAL_NUMBER "3aMQz/7vyMyo"
 #define LAYER_STATE_8BIT
 
 #define TAPPING_TERM_PER_KEY
