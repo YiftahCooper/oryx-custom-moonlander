@@ -17,7 +17,7 @@ static const uint8_t LANGUAGE_ENGLISH_B = 255;
 static const uint8_t LANGUAGE_HEBREW_R = 255;
 static const uint8_t LANGUAGE_HEBREW_G = 0;
 static const uint8_t LANGUAGE_HEBREW_B = 0;
-static const uint16_t LANGUAGE_TOGGLE_GUARD_MS = 90;
+static const uint16_t LANGUAGE_TOGGLE_GUARD_MS = 250;
 
 // Suppress duplicate language flips caused by accidental re-triggering/bounce.
 static bool language_toggle_guard_armed = false;
