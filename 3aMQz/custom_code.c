@@ -59,9 +59,10 @@ void custom_language_toggle(void) {
 }
 
 void custom_language_resync(void) {
+    if (!language_toggle_guard_allows_action()) {
+        return;
+    }
     // Force a known baseline: English + default indicator color.
-    language_toggle_timer = timer_read();
-    language_toggle_guard_armed = true;
     language_is_hebrew = false;
 }
 
