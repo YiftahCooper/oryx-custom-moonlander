@@ -44,11 +44,11 @@ enum tap_dance_codes {
   DANCE_2,
 };
 
-#define DUAL_FUNC_0 LT(2, KC_F21)
-#define DUAL_FUNC_1 LT(11, KC_M)
-#define DUAL_FUNC_2 LT(5, KC_F12)
-#define DUAL_FUNC_3 LT(9, KC_F24)
-#define DUAL_FUNC_4 LT(2, KC_2)
+#define DUAL_FUNC_0 LT(4, KC_Y)
+#define DUAL_FUNC_1 LT(10, KC_3)
+#define DUAL_FUNC_2 LT(11, KC_E)
+#define DUAL_FUNC_3 LT(4, KC_S)
+#define DUAL_FUNC_4 LT(1, KC_F6)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_moonlander(
